@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.17 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.18 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.17</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.18</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -368,6 +368,8 @@ const rooms=[],wallRects=[],fixtures=[],noteWorld=[],exitDoors=[],pitQuads=[],st
 const dynamicExitChunks=new Map(),activePitBarriers=new Map(),pitCrossStates=new Map();
 let activeExitKey=null,exitNeedsReplacement=true;
 const SPECIAL_REGION=6;
+// One pit transition per macro-region. Pit rooms are progression gates, not
+// ordinary rooms sprinkled through the middle of the maze.
 const regionPlans=new Map();
 const forcedComplexChunks=new Set();
 const chunkDefs=new Map();
@@ -381,48 +383,39 @@ function regionPlan(sx,sz){
   const key=sx+','+sz;if(regionPlans.has(key))return regionPlans.get(key);
   let st=chunkHash(sx,sz,0x7a31c2d9)||1;const rr=()=>{st=(Math.imul(st,1664525)+1013904223)>>>0;return st/4294967296};
   const bx=sx*SPECIAL_REGION,bz=sz*SPECIAL_REGION;
-  let gx=bx+1+Math.floor(rr()*(SPECIAL_REGION-2)),gz=bz+1+Math.floor(rr()*(SPECIAL_REGION-2));
-  if(sx===0&&sz===0&&Math.abs(gx)+Math.abs(gz)<4){gx=bx+SPECIAL_REGION-2;gz=bz+SPECIAL_REGION-3}
-  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];let di=Math.floor(rr()*4),dx=dirs[di][0],dz=dirs[di][1];
-  let ex=gx+dx,ez=gz+dz;
-  const minx=bx,maxx=bx+SPECIAL_REGION-1,minz=bz,maxz=bz+SPECIAL_REGION-1;
-  if(ex<minx||ex>maxx||ez<minz||ez>maxz){dx=-dx;dz=-dz;ex=gx+dx;ez=gz+dz}
-  const used=new Set([gx+','+gz,ex+','+ez]);
-  function pick(){for(let n=0;n<30;n++){const x=bx+Math.floor(rr()*SPECIAL_REGION),z=bz+Math.floor(rr()*SPECIAL_REGION),k=x+','+z;if(!used.has(k)){used.add(k);return{x,z}}}return{x:bx,z:bz}}
-  function pickExtraGrid(){
-    for(let n=0;n<60;n++){
-      const x=bx+Math.floor(rr()*SPECIAL_REGION),z=bz+Math.floor(rr()*SPECIAL_REGION),k=x+','+z;
-      // Keep the immediate spawn neighborhood free of pit rooms, but otherwise
-      // allow several per region so they are rare-but-findable rather than scarce.
-      if(used.has(k))continue;
-      if(sx===0&&sz===0&&Math.abs(x)+Math.abs(z)<=2)continue;
-      used.add(k);return{x,z};
-    }
-    return pick();
-  }
-  // Three pit/grid rooms per 6x6 special region instead of one. Exit/hole/vent
-  // frequency is unchanged; only pit-room discovery is increased.
-  const g2=pickExtraGrid(),g3=pickExtraGrid();
+
+  // Put the transition close to one edge of the macro-region instead of in its
+  // middle. This makes the pit read like a threshold between two larger sections.
+  const side=Math.floor(rr()*4);
+  let gx,gz,axis;
+  if(side===0){gx=bx+1;gz=bz+1+Math.floor(rr()*(SPECIAL_REGION-2));axis='x'}
+  else if(side===1){gx=bx+SPECIAL_REGION-2;gz=bz+1+Math.floor(rr()*(SPECIAL_REGION-2));axis='x'}
+  else if(side===2){gz=bz+1;gx=bx+1+Math.floor(rr()*(SPECIAL_REGION-2));axis='z'}
+  else{gz=bz+SPECIAL_REGION-2;gx=bx+1+Math.floor(rr()*(SPECIAL_REGION-2));axis='z'}
+
+  // Keep the initial spawn neighborhood free of a transition room.
+  if(sx===0&&sz===0&&Math.abs(gx)+Math.abs(gz)<4){gx=bx+SPECIAL_REGION-2;gz=bz+SPECIAL_REGION-2;axis=(rr()<.5?'x':'z')}
+
+  const used=new Set([gx+','+gz]);
+  function pick(){for(let n=0;n<40;n++){const x=bx+Math.floor(rr()*SPECIAL_REGION),z=bz+Math.floor(rr()*SPECIAL_REGION),k=x+','+z;if(!used.has(k)){used.add(k);return{x,z}}}return{x:bx,z:bz}}
   const h=pick(),v=pick();
-  const p={grid:{x:gx,z:gz},grids:[{x:gx,z:gz},g2,g3],exit:{x:ex,z:ez},hole:h,vent:v};regionPlans.set(key,p);return p;
+  const p={grid:{x:gx,z:gz},grids:[{x:gx,z:gz}],gridAxis:axis,hole:h,vent:v};
+  regionPlans.set(key,p);return p;
 }
 function specialKind(cx,cz){
   const key=cx+','+cz;
   if(dynamicExitChunks.has(key))return'exit';
   const sx=Math.floor(cx/SPECIAL_REGION),sz=Math.floor(cz/SPECIAL_REGION),p=regionPlan(sx,sz);
   if(p.grids.some(g=>cx===g.x&&cz===g.z))return'grid';
-  // The old pre-authored exit chunk is deliberately disabled. Exit rooms are
-  // promoted dynamically only after the player crosses a pit room.
-  if(cx===p.exit.x&&cz===p.exit.z)return'complex';
-  // Low wall holes / vent-crawl openings are disabled globally. Their former
-  // special chunks now become ordinary complex room networks so there can never
-  // be a visible opening that fails collision/traversal.
-  if(cx===p.hole.x&&cz===p.hole.z)return'complex';
-  if(cx===p.vent.x&&cz===p.vent.z)return'complex';
-  if(forcedComplexChunks.has(key))return'complex';
+  // Deprecated hole/vent/complex reservations now use the same safe architectural
+  // generator as every other Level 0 chunk. This removes isolated boxes and slits.
   return'normal';
 }
-function pitGateAxis(cx,cz){return (chunkHash(cx,cz,0x29e14b71)&1)?'x':'z'}
+function pitGateAxis(cx,cz){
+  const p=regionPlan(Math.floor(cx/SPECIAL_REGION),Math.floor(cz/SPECIAL_REGION));
+  if(p.grid&&p.grid.x===cx&&p.grid.z===cz)return p.gridAxis||'x';
+  return (chunkHash(cx,cz,0x29e14b71)&1)?'x':'z';
+}
 function chunkRng(cx,cz){let st=chunkHash(cx,cz,0x91e10da5)||1;return()=>{st=(Math.imul(st,1664525)+1013904223)>>>0;return st/4294967296}}
 function crr(r,a,b){return a+(b-a)*r()}
 function snap(v,g=CEIL_GRID){return Math.round(v/g)*g}
@@ -534,6 +527,38 @@ function generateChunk(cx,cz){
   function addFixture(x,z,deadChance=.07){x=snap(x,CEIL_GRID);z=snap(z,CEIL_GRID);def.fixtures.push({x,z,dead:fixtureDeadAt(x,z)})}
   function roomWallX(x,z0,z1){pushWall({x0:x-WALL_T*.5,z0:z0,x1:x+WALL_T*.5,z1:z1})}
   function roomWallZ(z,x0,x1){pushWall({x0:x0,z0:z-WALL_T*.5,x1:x1,z1:z+WALL_T*.5})}
+  function edgeRand(ownerX,ownerZ,salt){let st=chunkHash(ownerX,ownerZ,salt)||1;return()=>{st=(Math.imul(st,1664525)+1013904223)>>>0;return st/4294967296}}
+  function seamSpec(side){
+    let er,x0,x1,center,width,ax,az,bx2,bz2;
+    if(side==='east'||side==='west'){
+      const ox=side==='east'?cx:cx-1,oz=cz;er=edgeRand(ox,oz,0x4431);x0=b.z0;x1=b.z1;width=crr(er,1.86,2.18);center=x0+(x1-x0)*crr(er,.28,.72);
+      ax=ox;az=oz;bx2=ox+1;bz2=oz;
+    }else{
+      const ox=cx,oz=side==='south'?cz:cz-1;er=edgeRand(ox,oz,0x9177);x0=b.x0;x1=b.x1;width=crr(er,1.86,2.18);center=x0+(x1-x0)*crr(er,.28,.72);
+      ax=ox;az=oz;bx2=ox;bz2=oz+1;
+    }
+    // If this seam touches a pit transition, snap the doorway to an actual bridge
+    // lane. The player can therefore always enter the transition from the maze
+    // without stepping through a doorway directly into an open shaft.
+    let pcx=null,pcz=null;
+    if(isPlannedPitChunk(ax,az)){pcx=ax;pcz=az}else if(isPlannedPitChunk(bx2,bz2)){pcx=bx2;pcz=bz2}
+    if(pcx!==null){
+      const pb=chunkBounds(pcx,pcz),margin=.34,n=6,bridge=1.02;
+      const px0=pb.x0+margin,px1=pb.x1-margin,pz0=pb.z0+margin,pz1=pb.z1-margin;
+      const pitX=((px1-px0)-(n-1)*bridge)/n,pitZ=((pz1-pz0)-(n-1)*bridge)/n;
+      const lane=Math.abs(chunkHash(pcx,pcz,(side==='east'||side==='west')?0x25bc:0x71ad))%(n-1);
+      center=(side==='east'||side==='west')
+        ? pz0+(lane+1)*pitZ+lane*bridge+bridge*.5
+        : px0+(lane+1)*pitX+lane*bridge+bridge*.5;
+      width=2.02;
+    }
+    return{center,width};
+  }
+  function addOwnedChunkSeams(){
+    const e=seamSpec('east'),s=seamSpec('south');
+    verticalOpening(b.x1,b.z0,b.z1,e.center,e.width,false);
+    horizontalOpening(b.z1,b.x0,b.x1,s.center,s.width,false);
+  }
   function buildRectRoom(x0,z0,x1,z1,opt={}){
     if(opt.west)verticalOpening(x0,z0,z1,opt.west.center??((z0+z1)*.5),opt.west.width||1.72,!!opt.west.crawl,!!opt.west.exact);else roomWallX(x0,z0,z1);
     if(opt.east)verticalOpening(x1,z0,z1,opt.east.center??((z0+z1)*.5),opt.east.width||1.72,!!opt.east.crawl,!!opt.east.exact);else roomWallX(x1,z0,z1);
@@ -559,32 +584,36 @@ function generateChunk(cx,cz){
       }
     }
   }
-  function finishSpecial(){def.fixtures=canonicalizeFixtures(def.fixtures);chunkDefs.set(key,def);return def}
+  function finishSpecial(){addOwnedChunkSeams();def.walls=cleanWallGraph(def.walls);def.fixtures=canonicalizeFixtures(def.fixtures);chunkDefs.set(key,def);return def}
   function buildGridRoom(){
-    const x0=b.x0+1.45,x1=b.x1-1.45,z0=b.z0+1.45,z1=b.z1-1.45;
-    const n=6,bridge=.92,roomW=x1-x0,roomD=z1-z0;
+    // The pit is a transition FIELD, not a box placed inside the maze. The shafts
+    // occupy almost the whole chunk and the surrounding section wall can only be
+    // crossed through this field, so there is nothing to circle around looking
+    // for a hidden entrance.
+    const margin=.34,x0=b.x0+margin,x1=b.x1-margin,z0=b.z0+margin,z1=b.z1-margin;
+    const n=6,bridge=1.02,roomW=x1-x0,roomD=z1-z0;
     const pitX=(roomW-(n-1)*bridge)/n,pitZ=(roomD-(n-1)*bridge)/n;
-    const westBridgeZ=z0+pitZ+bridge*.5;
-    const eastBridgeZ=z0+5*pitZ+4.5*bridge;
-    const northBridgeX=x0+pitX+bridge*.5;
-    const southBridgeX=x0+5*pitX+4.5*bridge;
-
-    // Each pit room is a genuine world gate. Its two usable openings are on
-    // opposite sides, while a persistent section wall (registered when the room
-    // is discovered) extends away from it so the room cannot be bypassed.
     const gateAxis=pitGateAxis(cx,cz);
-    if(gateAxis==='x'){
-      buildRectRoom(x0,z0,x1,z1,{west:{center:westBridgeZ,width:.96,exact:true},east:{center:eastBridgeZ,width:.96,exact:true}});
-    }else{
-      buildRectRoom(x0,z0,x1,z1,{north:{center:northBridgeX,width:.96,exact:true},south:{center:southBridgeX,width:.96,exact:true}});
-    }
     def.gate={axis:gateAxis,line:gateAxis==='x'?(x0+x1)*.5:(z0+z1)*.5,x0,z0,x1,z1};
 
-    // Perfectly symmetrical 6x6 shafts. No border walkway exists inside the room.
+    // Symmetrical shafts with a continuous crosshatched bridge network. There is
+    // no perimeter walkway wide enough to bypass the transition.
     for(let j=0;j<n;j++)for(let i=0;i<n;i++){
       const px0=x0+i*(pitX+bridge),pz0=z0+j*(pitZ+bridge);
       def.pits.push({x0:px0,z0:pz0,x1:px0+pitX,z1:pz0+pitZ,depth:6.8});
     }
+
+    // Short approach fins make the transition feel embedded in ordinary Level 0
+    // architecture without enclosing it in an obvious rectangular shell.
+    const fin=3.2,half=3.35;
+    if(gateAxis==='x'){
+      roomWallZ(z0,b.x0,b.x0+fin);roomWallZ(z1,b.x0,b.x0+fin);
+      roomWallZ(z0,b.x1-fin,b.x1);roomWallZ(z1,b.x1-fin,b.x1);
+    }else{
+      roomWallX(x0,b.z0,b.z0+fin);roomWallX(x1,b.z0,b.z0+fin);
+      roomWallX(x0,b.z1-fin,b.z1);roomWallX(x1,b.z1-fin,b.z1);
+    }
+
     const lx=[x0+roomW*.20,x0+roomW*.50,x0+roomW*.80];
     const lz=[z0+roomD*.20,z0+roomD*.50,z0+roomD*.80];
     for(const xx of lx)for(const zz of lz)addFixture(xx,zz,0);
@@ -649,7 +678,6 @@ function generateChunk(cx,cz){
   if(kind==='exit')return buildExitRoom();
   if(kind==='hole')return buildHoleChunk();
   if(kind==='vent')return buildVentChunk();
-  if(kind==='complex')return buildComplexChunk();
 
   for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++)def.rooms.push({x0:xs[ix],x1:xs[ix+1],z0:zs[iz],z1:zs[iz+1],ix,iz});
 
@@ -669,10 +697,29 @@ function generateChunk(cx,cz){
     const n=opts[Math.floor(r()*opts.length)],k=edgeKey(ix,iz,n[0],n[1]);
     openEdges.add(k);treeEdges.add(k);seenCells.add(`${n[0]},${n[1]}`);stack.push(n);
   }
-  // Add a restrained number of loops so the map is not a single-path maze.
+  // Add loops generously enough that Level 0 continues instead of repeatedly
+  // collapsing into dead ends.
   for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
-    if(ix<cols-1){const k=edgeKey(ix,iz,ix+1,iz);if(!openEdges.has(k)&&r()<.18){openEdges.add(k);loopEdges.add(k)}}
-    if(iz<rows-1){const k=edgeKey(ix,iz,ix,iz+1);if(!openEdges.has(k)&&r()<.18){openEdges.add(k);loopEdges.add(k)}}
+    if(ix<cols-1){const k=edgeKey(ix,iz,ix+1,iz);if(!openEdges.has(k)&&r()<.30){openEdges.add(k);loopEdges.add(k)}}
+    if(iz<rows-1){const k=edgeKey(ix,iz,ix,iz+1);if(!openEdges.has(k)&&r()<.30){openEdges.add(k);loopEdges.add(k)}}
+  }
+
+  // Hard architectural rule: every ordinary room has at least TWO usable exits.
+  // This removes the DFS-tree leaves that were responsible for the flood of
+  // one-door dead ends while preserving a maze-like network of loops.
+  function cellNeighbors(ix,iz){const a=[];if(ix>0)a.push([ix-1,iz]);if(ix<cols-1)a.push([ix+1,iz]);if(iz>0)a.push([ix,iz-1]);if(iz<rows-1)a.push([ix,iz+1]);return a}
+  function degree(ix,iz){let n=0;for(const q of cellNeighbors(ix,iz))if(openEdges.has(edgeKey(ix,iz,q[0],q[1])))n++;return n}
+  for(let pass=0;pass<4;pass++){
+    let changed=false;
+    for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
+      while(degree(ix,iz)<2){
+        const closed=cellNeighbors(ix,iz).filter(q=>!openEdges.has(edgeKey(ix,iz,q[0],q[1])));
+        if(!closed.length)break;
+        closed.sort((a,b)=>degree(a[0],a[1])-degree(b[0],b[1]) || (r()<.5?-1:1));
+        const q=closed[0],k=edgeKey(ix,iz,q[0],q[1]);openEdges.add(k);loopEdges.add(k);changed=true;
+      }
+    }
+    if(!changed)break;
   }
   // The spawn room gets two ordinary exits, but no walls are deleted wholesale.
   if(cx===0&&cz===0){
@@ -715,11 +762,9 @@ function generateChunk(cx,cz){
   // No decorative free-standing wall stubs are added here. Every ordinary wall
   // is now a complete room boundary, a real doorway, or a chunk seam.
 
-  // Chunk seams are closed by deterministic shared walls with normal doorways so
-  // transitions feel like rooms/corridors instead of enormous open seams.
-  const edgeR=(salt)=>{let st=chunkHash(cx,cz,salt)||1;return()=>{st=(Math.imul(st,1664525)+1013904223)>>>0;return st/4294967296}};
-  {const er=edgeR(0x4431),x=b.x1,len=b.z1-b.z0,gapW=crr(er,1.78,2.16),c=b.z0+len*crr(er,.28,.72);verticalOpening(x,b.z0,b.z1,c,gapW,false)}
-  {const er=edgeR(0x9177),z=b.z1,len=b.x1-b.x0,gapW=crr(er,1.78,2.16),c=b.x0+len*crr(er,.28,.72);horizontalOpening(z,b.x0,b.x1,c,gapW,false)}
+  // Chunk seams use one deterministic shared doorway specification, including
+  // special chunks, so adjacent architecture never leaves accidental slits.
+  addOwnedChunkSeams();
 
   // Clean the orthogonal wall graph before rendering. Tiny near-misses are
   // snapped to junction centerlines, microscopic overhangs are trimmed, and
@@ -758,8 +803,8 @@ function generateChunk(cx,cz){
         for(const v of vs){
           const vx=(v.x0+v.x1)*.5;
           if(hz<v.z0-.08||hz>v.z1+.08)continue;
-          if(Math.abs(h.x0-vx)<.08)h.x0=vx;
-          if(Math.abs(h.x1-vx)<.08)h.x1=vx;
+          if(Math.abs(h.x0-vx)<.20)h.x0=vx;
+          if(Math.abs(h.x1-vx)<.20)h.x1=vx;
         }
       }
       for(const v of vs){
@@ -767,8 +812,8 @@ function generateChunk(cx,cz){
         for(const h of hs){
           const hz=(h.z0+h.z1)*.5;
           if(vx<h.x0-.08||vx>h.x1+.08)continue;
-          if(Math.abs(v.z0-hz)<.08)v.z0=hz;
-          if(Math.abs(v.z1-hz)<.08)v.z1=hz;
+          if(Math.abs(v.z0-hz)<.20)v.z0=hz;
+          if(Math.abs(v.z1-hz)<.20)v.z1=hz;
         }
       }
       ws=mergeCollinear(ws);
@@ -811,21 +856,63 @@ function registerPitBarrier(def){
   activePitBarriers.set(k,{key:k,cx:def.cx,cz:def.cz,axis:g.axis,line:g.line,x0:g.x0,z0:g.z0,x1:g.x1,z1:g.z1});
 }
 function appendPitBarrierWalls(){
-  const extra=.7;
+  // Build a continuous but gently stepped section boundary. It remains impossible
+  // to walk around a pit transition, but following the wall no longer reveals an
+  // artificial giant rectangle or one perfectly straight mega-wall.
+  const hashOffset=(g,band)=>{
+    const parts=g.key.split(','),gx=Number(parts[0])||0,gz=Number(parts[1])||0;
+    const h=chunkHash(gx+band,gz-band,0x4a9132bd);
+    return (((h%5)-2)*1.25); // -2.5 .. +2.5 m, still subtle at room scale
+  };
+  const addXRun=(g,za,zb,startAtPit)=>{
+    if(zb<=za)return;
+    let z=za,prevX=g.line;
+    while(z<zb-.001){
+      const next=Math.min(zb,(Math.floor(z/CHUNK)+1)*CHUNK);
+      const band=Math.floor((z+.01)/CHUNK),x=startAtPit&&Math.abs(z-za)<.01?g.line:g.line+hashOffset(g,band);
+      if(Math.abs(x-prevX)>.04){wallRects.push({x0:Math.min(prevX,x)-WALL_T*.5,z0:z-WALL_T*.5,x1:Math.max(prevX,x)+WALL_T*.5,z1:z+WALL_T*.5,y0:0,y1:H,gateBarrier:true})}
+      wallRects.push({x0:x-WALL_T*.5,z0:z-WALL_T*.35,x1:x+WALL_T*.5,z1:next+WALL_T*.35,y0:0,y1:H,gateBarrier:true});
+      prevX=x;z=next;
+    }
+  };
+  const addZRun=(g,xa,xb,startAtPit)=>{
+    if(xb<=xa)return;
+    let x=xa,prevZ=g.line;
+    while(x<xb-.001){
+      const next=Math.min(xb,(Math.floor(x/CHUNK)+1)*CHUNK);
+      const band=Math.floor((x+.01)/CHUNK),z=startAtPit&&Math.abs(x-xa)<.01?g.line:g.line+hashOffset(g,band);
+      if(Math.abs(z-prevZ)>.04){wallRects.push({x0:x-WALL_T*.5,z0:Math.min(prevZ,z)-WALL_T*.5,x1:x+WALL_T*.5,z1:Math.max(prevZ,z)+WALL_T*.5,y0:0,y1:H,gateBarrier:true})}
+      wallRects.push({x0:x-WALL_T*.35,z0:z-WALL_T*.5,x1:next+WALL_T*.35,z1:z+WALL_T*.5,y0:0,y1:H,gateBarrier:true});
+      prevZ=z;x=next;
+    }
+  };
   for(const g of activePitBarriers.values()){
     if(g.axis==='x'){
-      if(g.line<renderMinX-1||g.line>renderMaxX+1)continue;
-      const x0=g.line-WALL_T*.5,x1=g.line+WALL_T*.5;
-      if(g.z0>renderMinZ-extra)wallRects.push({x0,z0:renderMinZ-extra,x1,z1:g.z0-.12,y0:0,y1:H,gateBarrier:true});
-      if(g.z1<renderMaxZ+extra)wallRects.push({x0,z0:g.z1+.12,x1,z1:renderMaxZ+extra,y0:0,y1:H,gateBarrier:true});
+      if(g.line<renderMinX-4||g.line>renderMaxX+4)continue;
+      addXRun(g,g.z1-.05,renderMaxZ+.7,true);
+      // Build the opposite half from the pit outward by reversing coordinates,
+      // then mirror the deterministic stepping manually in short bands.
+      let z=g.z0+.05,prevX=g.line;
+      while(z>renderMinZ-.7+.001){
+        const prev=Math.max(renderMinZ-.7,Math.floor((z-.01)/CHUNK)*CHUNK);
+        const band=Math.floor((z-.01)/CHUNK),x=Math.abs(z-(g.z0+.05))<.01?g.line:g.line+hashOffset(g,band);
+        if(Math.abs(x-prevX)>.04)wallRects.push({x0:Math.min(prevX,x)-WALL_T*.5,z0:z-WALL_T*.5,x1:Math.max(prevX,x)+WALL_T*.5,z1:z+WALL_T*.5,y0:0,y1:H,gateBarrier:true});
+        wallRects.push({x0:x-WALL_T*.5,z0:prev-WALL_T*.35,x1:x+WALL_T*.5,z1:z+WALL_T*.35,y0:0,y1:H,gateBarrier:true});prevX=x;z=prev;
+      }
     }else{
-      if(g.line<renderMinZ-1||g.line>renderMaxZ+1)continue;
-      const z0=g.line-WALL_T*.5,z1=g.line+WALL_T*.5;
-      if(g.x0>renderMinX-extra)wallRects.push({x0:renderMinX-extra,z0,x1:g.x0-.12,z1,y0:0,y1:H,gateBarrier:true});
-      if(g.x1<renderMaxX+extra)wallRects.push({x0:g.x1+.12,z0,x1:renderMaxX+extra,z1,y0:0,y1:H,gateBarrier:true});
+      if(g.line<renderMinZ-4||g.line>renderMaxZ+4)continue;
+      addZRun(g,g.x1-.05,renderMaxX+.7,true);
+      let x=g.x0+.05,prevZ=g.line;
+      while(x>renderMinX-.7+.001){
+        const prev=Math.max(renderMinX-.7,Math.floor((x-.01)/CHUNK)*CHUNK);
+        const band=Math.floor((x-.01)/CHUNK),z=Math.abs(x-(g.x0+.05))<.01?g.line:g.line+hashOffset(g,band);
+        if(Math.abs(z-prevZ)>.04)wallRects.push({x0:x-WALL_T*.5,z0:Math.min(prevZ,z)-WALL_T*.5,x1:x+WALL_T*.5,z1:Math.max(prevZ,z)+WALL_T*.5,y0:0,y1:H,gateBarrier:true});
+        wallRects.push({x0:prev-WALL_T*.35,z0:z-WALL_T*.5,x1:x+WALL_T*.35,z1:z+WALL_T*.5,y0:0,y1:H,gateBarrier:true});prevZ=z;x=prev;
+      }
     }
   }
 }
+
 
 
 function acquireWebGL(){
@@ -1387,6 +1474,30 @@ function rebuildActiveWorld(cx,cz,force=false){
     const d=generateChunk(cx+dx,cz+dz);if(d.kind==='grid')registerPitBarrier(d);wallRects.push(...d.walls);fixtures.push(...d.fixtures);noteWorld.push(...d.notes);exitDoors.push(...d.doors);pitQuads.push(...d.pits);stairBoxes.push(...d.steps);
   }
   appendPitBarrierWalls();
+
+  // Final world-space seam repair. Any collinear opening narrower than a usable
+  // passage is structural noise, not a doorway, so close it. Real doorways are
+  // >= .96m and ordinary passages are >= 1.62m, safely above this threshold.
+  (function sealTinyWallCracks(){
+    const structural=wallRects.filter(w=>!w.invisible&&!w.door&&(w.y0||0)<.01&&(w.y1||H)>H-.01);
+    const groups=new Map(),fill=[];
+    for(const w of structural){
+      const vw=(w.x1-w.x0)<=WALL_T*1.55,hw=(w.z1-w.z0)<=WALL_T*1.55;if(!vw&&!hw)continue;
+      const ori=vw?'v':'h',axis=ori==='v'?((w.x0+w.x1)*.5):((w.z0+w.z1)*.5),k=ori+':'+(Math.round(axis*20)/20).toFixed(2);
+      if(!groups.has(k))groups.set(k,[]);groups.get(k).push(w);
+    }
+    for(const [k,arr] of groups){
+      const v=k[0]==='v';arr.sort((a,b)=>(v?a.z0:a.x0)-(v?b.z0:b.x0));
+      for(let i=1;i<arr.length;i++){
+        const a=arr[i-1],b2=arr[i],end=v?a.z1:a.x1,beg=v?b2.z0:b2.x0,gap=beg-end;
+        if(gap>.015&&gap<.82){
+          if(v){const x=((a.x0+a.x1+b2.x0+b2.x1)/4);fill.push({x0:x-WALL_T*.5,z0:end-.03,x1:x+WALL_T*.5,z1:beg+.03,y0:0,y1:H,crackSeal:true})}
+          else{const z=((a.z0+a.z1+b2.z0+b2.z1)/4);fill.push({x0:end-.03,z0:z-WALL_T*.5,x1:beg+.03,z1:z+WALL_T*.5,y0:0,y1:H,crackSeal:true})}
+        }
+      }
+    }
+    wallRects.push(...fill);
+  })();
   // Deduplicate exact overlapping walls from adjacent generated chunks.
   const seen=new Set(),clean=[];for(const w of wallRects){const k=[w.x0,w.z0,w.x1,w.z1,w.y0||0,w.y1||H,w.crawl?1:0].map(v=>typeof v==='number'?v.toFixed(3):v).join(':');if(!seen.has(k)){seen.add(k);clean.push(w)}}wallRects.splice(0,wallRects.length,...clean);
   // A ceiling position can be proposed by more than one neighboring room/chunk.
@@ -1413,8 +1524,8 @@ function buildWorld(){
   for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
     const cx=activeChunkX+dx, cz=activeChunkZ+dz, d=generateChunk(cx,cz), b=d.bounds;
     if(d.kind==='grid'){
-      const x0=b.x0+1.45,x1=b.x1-1.45,z0=b.z0+1.45,z1=b.z1-1.45;
-      const n=6,bridge=.92,roomW=x1-x0,roomD=z1-z0;
+      const margin=.34,x0=b.x0+margin,x1=b.x1-margin,z0=b.z0+margin,z1=b.z1-margin;
+      const n=6,bridge=1.02,roomW=x1-x0,roomD=z1-z0;
       const pitX=(roomW-(n-1)*bridge)/n,pitZ=(roomD-(n-1)*bridge)/n;
       // Outside the enclosed chamber remains ordinary carpet. Inside it, ONLY
       // the crosshatched bridge network exists at floor height.
@@ -1971,7 +2082,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.17';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.18';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2046,7 +2157,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.17'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.18'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
