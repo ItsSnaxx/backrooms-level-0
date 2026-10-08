@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.19 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.20 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.19</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.20</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -420,18 +420,22 @@ function chunkRng(cx,cz){let st=chunkHash(cx,cz,0x91e10da5)||1;return()=>{st=(Ma
 function crr(r,a,b){return a+(b-a)*r()}
 function snap(v,g=CEIL_GRID){return Math.round(v/g)*g}
 function fixtureKey(x,z){return Math.round(snap(x,CEIL_GRID)/CEIL_GRID)+','+Math.round(snap(z,CEIL_GRID)/CEIL_GRID)}
-function fixtureDeadAt(x,z){
-  // One authoritative light state per world-space ceiling position. This must
-  // never depend on which chunk/room happened to create the fixture.
+function fixtureModeAt(x,z){
+  // One authoritative fixture condition per world-space ceiling position.
+  // Most lights are healthy; weak/flickering/dead fixtures are atmospheric exceptions.
   const ix=Math.round(snap(x,CEIL_GRID)/CEIL_GRID),iz=Math.round(snap(z,CEIL_GRID)/CEIL_GRID);
-  const h=mix32((worldSeed^Math.imul(ix,0x6d2b79f5)^Math.imul(iz,0x1b873593)^0x4f1bbcdc)>>>0);
-  return (h/4294967296)<.07;
+  const h=mix32((worldSeed^Math.imul(ix,0x6d2b79f5)^Math.imul(iz,0x1b873593)^0x4f1bbcdc)>>>0)/4294967296;
+  if(h<.040)return'dead';
+  if(h<.090)return'weak';
+  if(h<.130)return'flicker';
+  return'normal';
 }
+function fixtureDeadAt(x,z){return fixtureModeAt(x,z)==='dead'}
 function canonicalizeFixtures(list){
   const map=new Map();
   for(const f of list){
-    const x=snap(f.x,CEIL_GRID),z=snap(f.z,CEIL_GRID),k=fixtureKey(x,z);
-    if(!map.has(k))map.set(k,{x,z,dead:fixtureDeadAt(x,z)});
+    const x=snap(f.x,CEIL_GRID),z=snap(f.z,CEIL_GRID),k=fixtureKey(x,z),mode=f.forceOn?'normal':fixtureModeAt(x,z);
+    if(!map.has(k)||f.forceOn)map.set(k,{x,z,mode,dead:mode==='dead',axis:f.axis==='z'?'z':'x',forceOn:!!f.forceOn});
   }
   return [...map.values()];
 }
@@ -479,24 +483,27 @@ function generateChunk(cx,cz){
   const r=chunkRng(cx,cz),b=chunkBounds(cx,cz),kind=specialKind(cx,cz),def={cx,cz,kind,bounds:b,walls:[],fixtures:[],notes:[],rooms:[],doors:[],pits:[],steps:[],arrows:[],style:'classic'};
   const CRAWL_H=1.24;
 
-  // Reference-driven Level 0 architectural archetypes. Neighboring chunks still
-  // share deterministic seam doorways, but their interior scale and silhouette
-  // now vary dramatically: open pillar halls, narrow runs, broad partitioned
-  // rooms, half-wall spaces, and asymmetric corner/freestanding-wall layouts.
+  // Level 0 is primarily a dense, believable interior maze. Distinctive rooms are
+  // deliberately rare landmarks so they contrast with the repetitive labyrinth.
   const styleRoll=r();
   let roomStyle='classic',cols=5,rows=5;
-  if(styleRoll<.19){roomStyle='open';cols=3;rows=3}
-  else if(styleRoll<.37){roomStyle='pillars';cols=3;rows=3}
-  else if(styleRoll<.54){roomStyle='corridor';if(r()<.5){cols=6;rows=3}else{cols=3;rows=6}}
-  else if(styleRoll<.70){roomStyle='halfwall';if(r()<.5){cols=4;rows=3}else{cols=3;rows=4}}
-  else if(styleRoll<.85){roomStyle='offset';cols=4;rows=4}
-  else {roomStyle='classic';cols=5;rows=5}
+  if(styleRoll<.48){
+    roomStyle='classic';
+    const q=r();if(q<.55){cols=5;rows=5}else if(q<.775){cols=6;rows=5}else{cols=5;rows=6}
+  }else if(styleRoll<.74){
+    roomStyle='corridor';if(r()<.5){cols=6;rows=4}else{cols=4;rows=6}
+  }else if(styleRoll<.86){
+    roomStyle='junction';if(r()<.5){cols=5;rows=4}else{cols=4;rows=5}
+  }else if(styleRoll<.92){roomStyle='offset';cols=5;rows=5}
+  else if(styleRoll<.96){roomStyle='pillars';cols=4;rows=4}
+  else if(styleRoll<.985){roomStyle='halfwall';cols=4;rows=4}
+  else {roomStyle='open';cols=3;rows=3}
   def.style=roomStyle;
   function buildCuts(a0,a1,count){
     const cuts=[a0],span=a1-a0,step=span/count;
     for(let i=1;i<count;i++){
-      let v=a0+step*i+crr(r,-.42,.42);
-      const minPrev=cuts[cuts.length-1]+3.65,maxHere=a1-(count-i)*3.65;
+      let v=a0+step*i+crr(r,-.30,.30);
+      const minPrev=cuts[cuts.length-1]+3.55,maxHere=a1-(count-i)*3.55;
       v=Math.max(minPrev,Math.min(maxHere,v));cuts.push(snap(v,.305));
     }
     cuts.push(a1);return cuts;
@@ -513,22 +520,22 @@ function generateChunk(cx,cz){
     // Full-height passages must always read as real doorways/corridors, never as
     // accidental slits. Crouch openings are intentionally narrower and handled
     // separately by their overhead crawl wall.
-    const minW=exact?.86:(crawl?1.04:1.62);
+    const minW=exact?.86:(crawl?1.04:1.68);
     gapW=Math.min(Math.max(gapW,minW),Math.max(minW,span-.76));
-    center=Math.max(z0+.40+gapW*.5,Math.min(z1-.40-gapW*.5,center));
+    center=Math.max(z0+.72+gapW*.5,Math.min(z1-.72-gapW*.5,center));
     const lo=center-gapW*.5,hi=center+gapW*.5;
-    if(lo-z0>.34)pushWall({x0:x-WALL_T*.5,z0:z0,x1:x+WALL_T*.5,z1:lo});
-    if(z1-hi>.34)pushWall({x0:x-WALL_T*.5,z0:hi,x1:x+WALL_T*.5,z1:z1});
+    if(lo-z0>.66)pushWall({x0:x-WALL_T*.5,z0:z0,x1:x+WALL_T*.5,z1:lo});
+    if(z1-hi>.66)pushWall({x0:x-WALL_T*.5,z0:hi,x1:x+WALL_T*.5,z1:z1});
     if(crawl)pushWall({x0:x-WALL_T*.5,z0:lo,x1:x+WALL_T*.5,z1:hi,y0:CRAWL_H,y1:H,crawl:true});
   }
   function horizontalOpening(z,x0,x1,center,gapW,crawl=false,exact=false){
     const span=x1-x0;
-    const minW=exact?.86:(crawl?1.04:1.62);
+    const minW=exact?.86:(crawl?1.04:1.68);
     gapW=Math.min(Math.max(gapW,minW),Math.max(minW,span-.76));
-    center=Math.max(x0+.40+gapW*.5,Math.min(x1-.40-gapW*.5,center));
+    center=Math.max(x0+.72+gapW*.5,Math.min(x1-.72-gapW*.5,center));
     const lo=center-gapW*.5,hi=center+gapW*.5;
-    if(lo-x0>.34)pushWall({x0:x0,z0:z-WALL_T*.5,x1:lo,z1:z+WALL_T*.5});
-    if(x1-hi>.34)pushWall({x0:hi,z0:z-WALL_T*.5,x1:x1,z1:z+WALL_T*.5});
+    if(lo-x0>.66)pushWall({x0:x0,z0:z-WALL_T*.5,x1:lo,z1:z+WALL_T*.5});
+    if(x1-hi>.66)pushWall({x0:hi,z0:z-WALL_T*.5,x1:x1,z1:z+WALL_T*.5});
     if(crawl)pushWall({x0:lo,z0:z-WALL_T*.5,x1:hi,z1:z+WALL_T*.5,y0:CRAWL_H,y1:H,crawl:true});
   }
   function addFixture(x,z,deadChance=.07){x=snap(x,CEIL_GRID);z=snap(z,CEIL_GRID);def.fixtures.push({x,z,dead:fixtureDeadAt(x,z)})}
@@ -678,7 +685,7 @@ function generateChunk(cx,cz){
     const zs=[z0+3.0,z0+6.0,z0+9.1,z0+12.2,z0+15.4,z0+18.4];
     for(let i=0;i<xs.length;i++)verticalOpening(xs[i],z0+.8,z1-.8,z0+1.5+((i*3.7)%(z1-z0-3.0)),1.05+(i%2)*.18,false);
     for(let j=0;j<zs.length;j++)horizontalOpening(zs[j],x0+.8,x1-.8,x0+1.5+((j*4.1)%(x1-x0-3.0)),1.05+(j%2)*.18,false);
-    for(let i=0;i<6;i++)addFixture(x0+2.1+(i%3)*6.4,z0+2.0+Math.floor(i/3)*11.5,.12);
+    for(let iz=0;iz<4;iz++)for(let ix=0;ix<4;ix++)addFixture(x0+(ix+.5)*(x1-x0)/4,z0+(iz+.5)*(z1-z0)/4,.06);
     return finishSpecial();
   }
   if(kind==='grid')return buildGridRoom();
@@ -704,10 +711,9 @@ function generateChunk(cx,cz){
     const n=opts[Math.floor(r()*opts.length)],k=edgeKey(ix,iz,n[0],n[1]);
     openEdges.add(k);treeEdges.add(k);seenCells.add(`${n[0]},${n[1]}`);stack.push(n);
   }
-  // Loop density is style-dependent. Open/pillar halls connect very freely;
-  // corridor chunks remain more directional while still never collapsing into
-  // the repeated dead ends that older builds produced.
-  const loopChance=roomStyle==='open'?.74:roomStyle==='pillars'?.66:roomStyle==='halfwall'?.55:roomStyle==='offset'?.46:roomStyle==='corridor'?.24:.34;
+  // Controlled loops keep the maze confusing without turning every boundary into
+  // a giant opening. Traditional rooms dominate and preserve strong wall definition.
+  const loopChance=roomStyle==='open'?.48:roomStyle==='pillars'?.34:roomStyle==='halfwall'?.30:roomStyle==='offset'?.28:roomStyle==='junction'?.42:roomStyle==='corridor'?.18:.27;
   for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
     if(ix<cols-1){const k=edgeKey(ix,iz,ix+1,iz);if(!openEdges.has(k)&&r()<loopChance){openEdges.add(k);loopEdges.add(k)}}
     if(iz<rows-1){const k=edgeKey(ix,iz,ix,iz+1);if(!openEdges.has(k)&&r()<loopChance){openEdges.add(k);loopEdges.add(k)}}
@@ -743,16 +749,17 @@ function generateChunk(cx,cz){
       for(const k of candidates){if(count>=2)break;if(!openEdges.has(k)){openEdges.add(k);loopEdges.add(k);count++}}
     }
   }
-  const rowBias=Array.from({length:rows},()=>crr(r,roomStyle==='corridor'?.32:.30,roomStyle==='corridor'?.68:.70));
-  const colBias=Array.from({length:cols},()=>crr(r,roomStyle==='corridor'?.32:.30,roomStyle==='corridor'?.68:.70));
-  const mergedOpeningChance=roomStyle==='open'?.58:roomStyle==='pillars'?.46:roomStyle==='halfwall'?.28:roomStyle==='offset'?.16:.0;
+  const rowBias=Array.from({length:rows},()=>crr(r,roomStyle==='corridor'?.34:.28,roomStyle==='corridor'?.66:.72));
+  const colBias=Array.from({length:cols},()=>crr(r,roomStyle==='corridor'?.34:.28,roomStyle==='corridor'?.66:.72));
+  const mergedOpeningChance=roomStyle==='open'?.14:roomStyle==='pillars'?.06:roomStyle==='halfwall'?.035:roomStyle==='offset'?.02:roomStyle==='junction'?.03:.005;
   function passageWidth(span){
-    if(roomStyle==='open')return Math.min(span-.82,crr(r,3.7,Math.max(3.9,span*.84)));
-    if(roomStyle==='pillars')return Math.min(span-.82,crr(r,3.1,Math.max(3.3,span*.72)));
-    if(roomStyle==='halfwall')return Math.min(span-.82,crr(r,2.6,Math.max(2.8,span*.60)));
-    if(roomStyle==='offset')return Math.min(span-.82,crr(r,2.15,Math.max(2.35,span*.48)));
-    if(roomStyle==='corridor')return crr(r,1.78,2.04);
-    return crr(r,1.86,2.22);
+    if(roomStyle==='open')return Math.min(span-1.34,crr(r,2.75,Math.max(2.95,span*.46)));
+    if(roomStyle==='pillars')return Math.min(span-1.34,crr(r,2.25,Math.max(2.45,span*.40)));
+    if(roomStyle==='halfwall')return Math.min(span-1.34,crr(r,1.95,Math.max(2.12,span*.34)));
+    if(roomStyle==='offset')return Math.min(span-1.34,crr(r,1.82,2.16));
+    if(roomStyle==='junction')return Math.min(span-1.34,crr(r,1.88,2.28));
+    if(roomStyle==='corridor')return crr(r,1.70,1.96);
+    return crr(r,1.72,2.06);
   }
   for(let ix=1;ix<cols;ix++){
     const x=xs[ix];
@@ -775,55 +782,74 @@ function generateChunk(cx,cz){
     }
   }
 
-  // Reference-photo architectural details. These are real collision geometry,
-  // never cosmetic wall slivers, and are kept well inside rooms so they cannot
-  // interfere with shared chunk seams or create unwalkable cracks.
+  // Architectural details follow floor-plan logic. Freestanding geometry is only
+  // allowed when it clearly reads as a structural pillar; divider walls must anchor
+  // into an existing full-height wall.
   function addPillar(rm,w=1.02,d=1.02,ox=0,oz=0){
     const x=(rm.x0+rm.x1)*.5+ox,z=(rm.z0+rm.z1)*.5+oz;
-    if(x-w*.5<rm.x0+.72||x+w*.5>rm.x1-.72||z-d*.5<rm.z0+.72||z+d*.5>rm.z1-.72)return;
-    pushWall({x0:x-w*.5,z0:z-d*.5,x1:x+w*.5,z1:z+d*.5});
+    if(x-w*.5<rm.x0+.86||x+w*.5>rm.x1-.86||z-d*.5<rm.z0+.86||z+d*.5>rm.z1-.86)return false;
+    pushWall({x0:x-w*.5,z0:z-d*.5,x1:x+w*.5,z1:z+d*.5,pillar:true});return true;
   }
-  function addHalfWall(rm,vertical){
-    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(rw<5.2||rd<5.2)return;
-    const hh=crr(r,1.02,1.22);
-    if(vertical){
-      const x=crr(r,rm.x0+rw*.34,rm.x1-rw*.34),len=Math.min(rd*.54,crr(r,2.7,4.5)),z=(rm.z0+rm.z1)*.5;
-      pushWall({x0:x-WALL_T*.5,z0:z-len*.5,x1:x+WALL_T*.5,z1:z+len*.5,y0:0,y1:hh,halfWall:true});
-    }else{
-      const z=crr(r,rm.z0+rd*.34,rm.z1-rd*.34),len=Math.min(rw*.54,crr(r,2.7,4.5)),x=(rm.x0+rm.x1)*.5;
-      pushWall({x0:x-len*.5,z0:z-WALL_T*.5,x1:x+len*.5,z1:z+WALL_T*.5,y0:0,y1:hh,halfWall:true});
+  function roomAnchorCandidates(rm){
+    const out=[];
+    for(const w of def.walls){
+      if(w.invisible||w.halfWall||w.featureWall||w.pillar||(w.y0||0)>.01||(w.y1||H)<H-.01)continue;
+      const vw=(w.x1-w.x0)<=WALL_T*1.45,hw=(w.z1-w.z0)<=WALL_T*1.45;
+      if(vw){
+        const x=(w.x0+w.x1)*.5,ov=Math.min(w.z1,rm.z1-.62)-Math.max(w.z0,rm.z0+.62);
+        if(ov>1.35&&Math.abs(x-rm.x0)<.10)out.push({w,side:'west',a:Math.max(w.z0,rm.z0+.62),b:Math.min(w.z1,rm.z1-.62)});
+        if(ov>1.35&&Math.abs(x-rm.x1)<.10)out.push({w,side:'east',a:Math.max(w.z0,rm.z0+.62),b:Math.min(w.z1,rm.z1-.62)});
+      }else if(hw){
+        const z=(w.z0+w.z1)*.5,ov=Math.min(w.x1,rm.x1-.62)-Math.max(w.x0,rm.x0+.62);
+        if(ov>1.35&&Math.abs(z-rm.z0)<.10)out.push({w,side:'north',a:Math.max(w.x0,rm.x0+.62),b:Math.min(w.x1,rm.x1-.62)});
+        if(ov>1.35&&Math.abs(z-rm.z1)<.10)out.push({w,side:'south',a:Math.max(w.x0,rm.x0+.62),b:Math.min(w.x1,rm.x1-.62)});
+      }
     }
+    return out;
   }
-  function addFreestandingPartition(rm,vertical){
-    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(rw<5.0||rd<5.0)return;
-    if(vertical){
-      const len=Math.min(rd*.48,crr(r,2.5,4.2)),x=crr(r,rm.x0+1.55,rm.x1-1.55),z=(rm.z0+rm.z1)*.5+crr(r,-rd*.10,rd*.10);
-      pushWall({x0:x-WALL_T*.5,z0:z-len*.5,x1:x+WALL_T*.5,z1:z+len*.5,featureWall:true});
-    }else{
-      const len=Math.min(rw*.48,crr(r,2.5,4.2)),z=crr(r,rm.z0+1.55,rm.z1-1.55),x=(rm.x0+rm.x1)*.5+crr(r,-rw*.10,rw*.10);
-      pushWall({x0:x-len*.5,z0:z-WALL_T*.5,x1:x+len*.5,z1:z+WALL_T*.5,featureWall:true});
+  function anchoredDivider(rm,halfHeight=false){
+    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(rw<4.9||rd<4.9)return false;
+    const candidates=roomAnchorCandidates(rm);if(!candidates.length)return false;
+    // Try several real perimeter wall segments until the branch has enough clearance.
+    for(let tries=0;tries<8;tries++){
+      const a=candidates[Math.floor(r()*candidates.length)],pos=crr(r,a.a+.18,a.b-.18),hh=halfHeight?crr(r,1.02,1.18):H;
+      const maxLen=(a.side==='west'||a.side==='east')?rw-1.55:rd-1.55;
+      const len=Math.min(maxLen,halfHeight?crr(r,2.15,3.45):crr(r,2.35,4.15));if(len<1.7)continue;
+      let rect;
+      if(a.side==='west')rect={x0:rm.x0-WALL_T*.12,z0:pos-WALL_T*.5,x1:rm.x0+len,z1:pos+WALL_T*.5};
+      else if(a.side==='east')rect={x0:rm.x1-len,z0:pos-WALL_T*.5,x1:rm.x1+WALL_T*.12,z1:pos+WALL_T*.5};
+      else if(a.side==='north')rect={x0:pos-WALL_T*.5,z0:rm.z0-WALL_T*.12,x1:pos+WALL_T*.5,z1:rm.z0+len};
+      else rect={x0:pos-WALL_T*.5,z0:rm.z1-len,x1:pos+WALL_T*.5,z1:rm.z1+WALL_T*.12};
+      // Ignore the anchor itself; reject branches that would collide with unrelated geometry.
+      let clear=true;
+      for(const w of def.walls){if(w===a.w)continue;if(expandedOverlap(rect,w,.48)){clear=false;break}}
+      if(!clear)continue;
+      rect.y0=0;rect.y1=hh;if(halfHeight)rect.halfWall=true;else rect.featureWall=true;rect.anchored=true;
+      pushWall(rect);return true;
     }
+    return false;
   }
   if(roomStyle==='pillars'||roomStyle==='open'){
     let placed=0;
     for(const rm of def.rooms){
       const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;
-      if(rw>6.1&&rd>6.1&&r()<(roomStyle==='pillars'?.62:.28)){
-        addPillar(rm,crr(r,.90,1.24),crr(r,.90,1.24),crr(r,-rw*.12,rw*.12),crr(r,-rd*.12,rd*.12));
-        if(++placed>=(roomStyle==='pillars'?6:3))break;
+      if(rw>5.8&&rd>5.8&&r()<(roomStyle==='pillars'?.46:.20)){
+        if(addPillar(rm,crr(r,.92,1.26),crr(r,.92,1.26),crr(r,-rw*.10,rw*.10),crr(r,-rd*.10,rd*.10)))placed++;
+        if(placed>=(roomStyle==='pillars'?4:2))break;
       }
     }
   }
   if(roomStyle==='halfwall'){
-    let placed=0;for(const rm of def.rooms){if(r()<.42){addHalfWall(rm,r()<.5);if(++placed>=4)break}}
+    let placed=0;for(const rm of def.rooms){if(r()<.34&&anchoredDivider(rm,true)&&++placed>=2)break}
   }
   if(roomStyle==='offset'){
-    let placed=0;for(const rm of def.rooms){if(r()<.34){addFreestandingPartition(rm,r()<.5);if(++placed>=5)break}}
+    let placed=0;for(const rm of def.rooms){if(r()<.22&&anchoredDivider(rm,false)&&++placed>=3)break}
+  }
+  if(roomStyle==='junction'&&r()<.18){
+    const rm=def.rooms[Math.floor(r()*def.rooms.length)];if(rm)anchoredDivider(rm,false);
   }
   if(roomStyle==='corridor'){
-    // Repeated square columns/wall fins create the long staggered views seen in
-    // narrow Level 0 references without turning the run into a dead end.
-    let placed=0;for(const rm of def.rooms){const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(Math.max(rw,rd)>6.2&&r()<.22){addPillar(rm,.82,.82,crr(r,-rw*.16,rw*.16),crr(r,-rd*.16,rd*.16));if(++placed>=4)break}}
+    let placed=0;for(const rm of def.rooms){const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(Math.max(rw,rd)>6.0&&r()<.10&&addPillar(rm,.84,.84,crr(r,-rw*.12,rw*.12),crr(r,-rd*.12,rd*.12))&&++placed>=2)break}
   }
 
   // Chunk seams use one deterministic shared doorway specification, including
@@ -850,7 +876,7 @@ function generateChunk(cx,cz){
       let cur={...arr[0]};
       for(let i=1;i<arr.length;i++){
         const w=arr[i],end=v?cur.z1:cur.x1,beg=v?w.z0:w.x0;
-        if(beg<=end+.035){if(v)cur.z1=Math.max(cur.z1,w.z1);else cur.x1=Math.max(cur.x1,w.x1)}
+        if(beg<=end+.62){if(v)cur.z1=Math.max(cur.z1,w.z1);else cur.x1=Math.max(cur.x1,w.x1)}
         else{merged.push(cur);cur={...w}}
       }
       merged.push(cur);
@@ -867,8 +893,8 @@ function generateChunk(cx,cz){
         for(const v of vs){
           const vx=(v.x0+v.x1)*.5;
           if(hz<v.z0-.08||hz>v.z1+.08)continue;
-          if(Math.abs(h.x0-vx)<.20)h.x0=vx;
-          if(Math.abs(h.x1-vx)<.20)h.x1=vx;
+          if(Math.abs(h.x0-vx)<.28)h.x0=vx;
+          if(Math.abs(h.x1-vx)<.28)h.x1=vx;
         }
       }
       for(const v of vs){
@@ -876,15 +902,29 @@ function generateChunk(cx,cz){
         for(const h of hs){
           const hz=(h.z0+h.z1)*.5;
           if(vx<h.x0-.08||vx>h.x1+.08)continue;
-          if(Math.abs(v.z0-hz)<.20)v.z0=hz;
-          if(Math.abs(v.z1-hz)<.20)v.z1=hz;
+          if(Math.abs(v.z0-hz)<.28)v.z0=hz;
+          if(Math.abs(v.z1-hz)<.28)v.z1=hz;
         }
       }
       ws=mergeCollinear(ws);
     }
-    return ws.filter(w=>w.invisible||w.crawl||(w.x1-w.x0)>.16||(w.z1-w.z0)>.16);
+    return ws.filter(w=>{
+      if(w.invisible||w.crawl||w.door||w.pillar)return true;
+      const len=Math.max(w.x1-w.x0,w.z1-w.z0);
+      // Anything shorter than this reads as a procedural wall chip, not architecture.
+      return len>=.66;
+    });
   }
   def.walls=cleanWallGraph(def.walls);
+  // Validation/repair pass for authored architectural details. A divider may only
+  // survive if its anchored end actually touches another structural wall.
+  function anchoredToStructure(w){
+    if(!w.anchored)return true;
+    const pts=[[(w.x0+w.x1)*.5,w.z0],[(w.x0+w.x1)*.5,w.z1],[w.x0,(w.z0+w.z1)*.5],[w.x1,(w.z0+w.z1)*.5]];
+    for(const q of def.walls){if(q===w||q.invisible||q.halfWall||q.featureWall)continue;for(const p of pts)if(pointAabbDist2(p[0],p[1],q)<.34*.34)return true}
+    return false;
+  }
+  def.walls=def.walls.filter(anchoredToStructure);
   // Absolute safety rule for Level 0: crawl-hole/header geometry is not allowed.
   // If a future generator accidentally marks anything as a crawl segment, remove
   // that special behavior before it reaches rendering/collision.
@@ -926,17 +966,45 @@ function generateChunk(cx,cz){
     }
   }
 
-  // Mostly working, permanently static fixtures. Their state never changes at runtime.
+  // Dimension-driven fluorescent coverage. Every room receives a logical ceiling
+  // layout; larger rooms automatically receive more fixtures instead of becoming
+  // giant unlit voids. Fixtures are kept clear of walls/pillars.
+  function placeRoomFixture(px,pz,roomList,axis='x'){
+    const tries=[[0,0],[.70,0],[-.70,0],[0,.70],[0,-.70],[.58,.58],[-.58,.58],[.58,-.58],[-.58,-.58]];
+    for(const o of tries){
+      const x=snap(px+o[0],CEIL_GRID),z=snap(pz+o[1],CEIL_GRID);let clear=true;
+      for(const w of def.walls)if(pointAabbDist2(x,z,w)<.74*.74){clear=false;break}
+      if(!clear)continue;
+      const k=fixtureKey(x,z);if(roomList.some(f=>fixtureKey(f.x,f.z)===k))continue;
+      const mode=fixtureModeAt(x,z),f={x,z,mode,dead:mode==='dead',axis:axis==='z'?'z':'x'};def.fixtures.push(f);roomList.push(f);return f;
+    }
+    return null;
+  }
   for(const rm of def.rooms){
-    if(r()<.06)continue;
-    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0,pts=[];
-    if(rw>5.8&&rw>rd*1.16)pts.push([rm.x0+rw*.34,(rm.z0+rm.z1)*.5],[rm.x0+rw*.67,(rm.z0+rm.z1)*.5]);
-    else if(rd>5.8&&rd>rw*1.16)pts.push([(rm.x0+rm.x1)*.5,rm.z0+rd*.34],[(rm.x0+rm.x1)*.5,rm.z0+rd*.67]);
-    else pts.push([(rm.x0+rm.x1)*.5,(rm.z0+rm.z1)*.5]);
-    for(const p of pts){
-      const x=snap(p[0],CEIL_GRID),z=snap(p[1],CEIL_GRID);let clear=true;
-      for(const w of def.walls)if(pointAabbDist2(x,z,w)<.68*.68){clear=false;break}
-      if(clear)def.fixtures.push({x,z,dead:fixtureDeadAt(x,z)});
+    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;
+    const spacing=roomStyle==='open'?4.15:roomStyle==='corridor'?4.35:4.55;
+    let nx=Math.max(1,Math.min(4,Math.ceil(rw/spacing))),nz=Math.max(1,Math.min(4,Math.ceil(rd/spacing)));
+    if(roomStyle==='corridor'){
+      if(rw>rd*1.45)nz=1;else if(rd>rw*1.45)nx=1;
+    }
+    const roomLights=[],fixtureAxis=rd>rw*1.22?'z':'x';
+    for(let iz=0;iz<nz;iz++)for(let ix=0;ix<nx;ix++){
+      const x=rm.x0+(ix+.5)*rw/nx,z=rm.z0+(iz+.5)*rd/nz;placeRoomFixture(x,z,roomLights,fixtureAxis);
+    }
+    // Never accept a completely unlit ordinary room. If the deterministic states
+    // happened to make every proposed fixture dead, find one nearby healthy slot.
+    if(!roomLights.length||roomLights.every(f=>f.dead)){
+      const cxm=(rm.x0+rm.x1)*.5,czm=(rm.z0+rm.z1)*.5;
+      const offsets=[[0,0],[CEIL_GRID,0],[-CEIL_GRID,0],[0,CEIL_GRID],[0,-CEIL_GRID],[CEIL_GRID,CEIL_GRID],[-CEIL_GRID,CEIL_GRID]];
+      for(const o of offsets){
+        const x=snap(cxm+o[0],CEIL_GRID),z=snap(czm+o[1],CEIL_GRID);if(fixtureModeAt(x,z)==='dead')continue;
+        if(placeRoomFixture(x,z,roomLights,fixtureAxis))break;
+      }
+      if(roomLights.length&&roomLights.every(f=>f.dead)){
+        // Last-resort room safety: keep one fixture operational so a normal room
+        // can never become a pitch-black procedural accident.
+        roomLights[0].forceOn=true;roomLights[0].mode='normal';roomLights[0].dead=false;
+      }
     }
   }
 
@@ -1109,7 +1177,7 @@ function startCanvasFallback(){
     // ceiling tiles / fluorescent bars
     ctx.globalAlpha=.18;ctx.strokeStyle='#171711';ctx.lineWidth=1;for(let x=0;x<w;x+=68){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(w*.5+(x-w*.5)*.23,hh);ctx.stroke()}for(let y=24;y<hh;y+=46){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.globalAlpha=1;
     const rays=Math.max(160,Math.min(340,Math.floor(w*.52))),fovRay=1.12;
-    for(let i=0;i<rays;i++){const ra=ang-fovRay/2+fovRay*(i/(rays-1));const rx=Math.cos(ra),rz=Math.sin(ra);let dist=.02,hit=false;for(let n=0;n<180;n++){dist+=.055;if(isWallWorld(px+rx*dist,pz+rz*dist)){hit=true;break}}if(!hit)dist=12;const corrected=dist*Math.cos(ra-ang);let wallH=Math.min(h*1.65,(h*.92)/(corrected*.36+.16));const bob=Math.sin(bobPhase)*bobAmt*h;let top=hh-wallH*.52+bob,bottom=hh+wallH*.48+bob;let fog=Math.max(0,Math.min(.975,(corrected-1.25)/4.5));const lightCenter=1-Math.min(1,Math.abs(i-rays/2)/(rays*.5));if(flashlight)fog*=1-lightCenter*lightCenter*.76;let br=.62-fog*.54+(flashlight?lightCenter*lightCenter*.22:0);br=Math.max(.055,Math.min(1,br));const r=Math.floor(159*br),g=Math.floor(153*br),b=Math.floor(87*br);ctx.fillStyle=`rgb(${r},${g},${b})`;const x=i*w/rays,sw=w/rays+1;ctx.fillRect(x,top,sw,bottom-top);
+    for(let i=0;i<rays;i++){const ra=ang-fovRay/2+fovRay*(i/(rays-1));const rx=Math.cos(ra),rz=Math.sin(ra);let dist=.02,hit=false;for(let n=0;n<180;n++){dist+=.055;if(isWallWorld(px+rx*dist,pz+rz*dist)){hit=true;break}}if(!hit)dist=12;const corrected=dist*Math.cos(ra-ang);let wallH=Math.min(h*1.65,(h*.92)/(corrected*.36+.16));const bob=Math.sin(bobPhase)*bobAmt*h;let top=hh-wallH*.52+bob,bottom=hh+wallH*.48+bob;let fog=Math.max(0,Math.min(.78,(corrected-5.0)/14.0));const lightCenter=1-Math.min(1,Math.abs(i-rays/2)/(rays*.5));if(flashlight)fog*=1-lightCenter*lightCenter*.76;let br=.78-fog*.34+(flashlight?lightCenter*lightCenter*.20:0);br=Math.max(.20,Math.min(1,br));const r=Math.floor(159*br),g=Math.floor(153*br),b=Math.floor(87*br);ctx.fillStyle=`rgb(${r},${g},${b})`;const x=i*w/rays,sw=w/rays+1;ctx.fillRect(x,top,sw,bottom-top);
       // subtle vertical wallpaper grain
       if((i%7)===0){ctx.fillStyle=`rgba(80,72,36,${.06*(1-fog)})`;ctx.fillRect(x,top,Math.max(1,sw*.45),bottom-top)}
     }
@@ -1265,11 +1333,11 @@ void main(){
     base=texture2D(uWallTex,uv).rgb;
     float lum=dot(base,vec3(.299,.587,.114));
     base=mix(vec3(lum),base,.56);
-    base*=vec3(.87,.85,.58);
+    base*=vec3(.99,.96,.70);
     float age=n2(vec2(axis*.047,vP.y*.31));
     float mott=n2(vec2(axis*.31+13.0,vP.y*1.17));
     float grain=hash(floor(vec2(axis*18.0,vP.y*18.0)));
-    base*=.73+.20*age+.055*mott;
+    base*=.84+.13*age+.045*mott;
     base-=vec3(.045,.043,.032)*smoothstep(.70,.97,grain);
     blood=wallBlood();
   }else if(vM<1.5){
@@ -1278,7 +1346,7 @@ void main(){
     // texture reads less like a copy-paste tile.
     vec2 uv=vP.xz/0.62;
     base=texture2D(uFloorTex,uv).rgb;
-    float floorShade=.68+.06*n2(vP.xz*.18);
+    float floorShade=.82+.08*n2(vP.xz*.18);
     float macro=.94+.06*n2(vP.xz*.05+17.3);
     vec2 cellA=floor(vP.xz/3.35), localA=fract(vP.xz/3.35)-.5;
     vec2 offA=vec2(hash(cellA+vec2(1.7,2.3)),hash(cellA+vec2(8.1,4.9)))-.5;
@@ -1291,14 +1359,14 @@ void main(){
     float radB=mix(.18,.46,hash(cellB+vec2(9.2,3.7)));
     float wetB=(1.0-smoothstep(radB*.54,radB,length(localB-offB*.62)))*gateB;
     float wet=max(wetA*.75,wetB);
-    base*=vec3(.54,.52,.48)*floorShade*macro;
+    base*=vec3(.72,.70,.64)*floorShade*macro;
     base=mix(base,base*vec3(.55,.53,.50),wet*.72);
     blood=floorBlood();
   }else if(vM<2.5){
     base=texture2D(uCeilTex,vP.xz/1.22).rgb;
     float lum=dot(base,vec3(.299,.587,.114));
     base=mix(vec3(lum),base,.42);
-    base*=vec3(.36,.35,.30)*(.78+.16*n2(vP.xz*.15));
+    base*=vec3(.64,.62,.52)*(.84+.12*n2(vP.xz*.15));
   }else if(vM<3.5){
     // Static warm fluorescent panel. No camera-position or cell-dependent brightness.
     base=vec3(1.44,1.38,1.02);
@@ -1350,12 +1418,20 @@ void main(){
   }else if(vM<15.5){
     // The room beyond an exit is intentionally absolute black.
     base=vec3(.00025,.00022,.00018);
-  }else{
-    // Dry black wall paint used for rare directional arrows. It stays dark, but
-    // still responds enough to nearby fluorescent spill / flashlight to read as
-    // paint on wallpaper rather than a hole cut through the wall.
+  }else if(vM<16.5){
+    // Dry black wall paint used for rare directional arrows.
     float paint=.86+.14*n2(vec2((vP.x+vP.z)*9.0,vP.y*7.0));
     base=vec3(.016,.014,.010)*paint;
+  }else if(vM<17.5){
+    // Weak fluorescent tube: visibly powered, but tired and yellowed.
+    base=vec3(.82,.77,.54);
+  }else{
+    // Flickering tube. Material is assigned only to the small deterministic subset
+    // of fixtures classified as flickering, so this animation cannot affect normals.
+    float seed=hash(floor(vP.xz/4.0)+vec2(23.7,6.1));
+    float tick=floor(uTime*(7.0+seed*5.0));
+    float flick=mix(.30,1.0,smoothstep(.22,.72,hash(vec2(tick,seed*91.0))));
+    base=vec3(1.32,1.25,.88)*flick;
   }
   if(blood>0.){vec3 bloodCol=mix(vec3(.070,.010,.014),vec3(.135,.028,.032),clamp(blood*1.2,0.,1.));base=mix(base,bloodCol,clamp(blood*.78,0.,.88));}
 
@@ -1363,18 +1439,18 @@ void main(){
   float lmRaw=texture2D(uLightMap,clamp(lmuv,vec2(0.001),vec2(.999))).r;
   // The lightmap has a very dark storage floor. Remove that floor before using
   // it so unlit geometry stays genuinely dark rather than receiving a fake fill.
-  float lm=pow(clamp((lmRaw-.044)/.956,0.0,1.0),.82);
-  float nd=.50+.50*max(0.,dot(normalize(vN),normalize(vec3(.10,.98,.12))));
-  vec3 ambient=vec3(.0032,.0031,.0027);
-  vec3 lampTint=vec3(.96,.91,.70);
-  // ALL environmental illumination is persistent world-space lightmap data.
-  // It never depends on camera/player distance, so walking toward a fixture
-  // cannot make that fixture suddenly begin contributing light.
-  vec3 local=(ambient + lampTint*(lm*1.08))*mix(.44,1.0,nd);
-  float bloomField=pow(clamp(lm,0.0,1.0),1.34);
-  if(vM<.5)local+=lampTint*bloomField*.24;
-  if(vM>0.5&&vM<1.5)local+=lampTint*bloomField*.39;
-  if(vM>1.5&&vM<2.5)local+=lampTint*bloomField*.62;
+  float lm=pow(clamp((lmRaw-.032)/.968,0.0,1.0),.78);
+  float nd=.64+.36*max(0.,dot(normalize(vN),normalize(vec3(.10,.98,.12))));
+  // A gentle fluorescent/indirect baseline keeps ordinary Level 0 navigable even
+  // between fixtures. The actual pools and room-to-room spill still come from the
+  // persistent lightmap, so failed lights remain meaningful.
+  vec3 ambient=vec3(.030,.029,.023);
+  vec3 lampTint=vec3(.99,.95,.74);
+  vec3 local=(ambient + lampTint*(lm*1.24))*mix(.66,1.0,nd);
+  float bloomField=pow(clamp(lm,0.0,1.0),1.22);
+  if(vM<.5)local+=lampTint*bloomField*.28;
+  if(vM>0.5&&vM<1.5)local+=lampTint*bloomField*.44;
+  if(vM>1.5&&vM<2.5)local+=lampTint*bloomField*.72;
   if(vM>2.5&&vM<3.5)local=vec3(3.25,3.08,2.25)+lampTint*bloomField*.82;
   if(vM>3.5&&vM<4.5)local=vec3(.085,.080,.061)+lampTint*(lm*.12+bloomField*.10);
   if(vM>4.5&&vM<5.5)local*=.80;
@@ -1382,8 +1458,10 @@ void main(){
   if(vM>9.5&&vM<10.5)local=vec3(.004,.004,.0035);
   if(vM>10.5&&vM<11.5)local=vec3(.018,.016,.011)+lampTint*(lm*.16+bloomField*.11);
   if(vM>11.5&&vM<12.5)local=vec3(.0045,.0043,.0038);
-  if(vM>12.5)local=vec3(.004,.004,.0035);
-  if(vM>15.5)local=vec3(.12,.115,.09)+lampTint*(lm*.62+bloomField*.16);
+  if(vM>12.5&&vM<15.5)local=vec3(.004,.004,.0035);
+  if(vM>15.5&&vM<16.5)local=vec3(.12,.115,.09)+lampTint*(lm*.62+bloomField*.16);
+  if(vM>16.5&&vM<17.5)local=vec3(.88,.82,.60)+lampTint*(lm*.36+bloomField*.18);
+  if(vM>17.5)local=vec3(1.52,1.42,1.02)+lampTint*(lm*.52+bloomField*.28);
 
   vec3 toP=vP-uCam;float d=length(toP);vec3 dir=normalize(toP);
   float cone=smoothstep(.70,.955,dot(dir,normalize(uFwd)));
@@ -1397,11 +1475,13 @@ void main(){
     float glare=smoothstep(.08,.88,dot(dir,normalize(uFwd)))*.30;
     col+=vec3(1.22,1.13,.80)*glare;
   }
-  float fog=1.0-exp(-pow(max(0.,d-1.65)*.145,1.10));
-  fog=clamp(fog,0.,.978);
-  float beamPierce=uFlash*cone*flashRange*.46;
+  // Distance haze is subtle nearby and only becomes strong through several rooms.
+  // It darkens progressively instead of snapping architecture into blackness.
+  float fog=1.0-exp(-pow(max(0.,d-5.5)*.075,1.18));
+  fog=clamp(fog,0.,.88);
+  float beamPierce=uFlash*cone*flashRange*.52;
   fog*=1.0-beamPierce;
-  vec3 fogCol=vec3(.0085,.0095,.0072);
+  vec3 fogCol=vec3(.050,.048,.032);
   col=mix(col,fogCol,fog);
   // Fine monochrome film/sensor grain. It updates at a camera-like cadence
   // and is strongest in shadows/midtones, while highlights stay relatively clean.
@@ -1562,24 +1642,31 @@ function doorDynamicModel(d,out,openAmount=0){
   for(const yy of [.40,1.15,1.82]){const qx=hx+tx*.018-nx*(th*.5+.012),qz=hz+tz*.018-nz*(th*.5+.012);orientedPrism(qx,qz,yy-.055,yy+.055,tx,tz,.026,nx,nz,.018,14,out)}
 }
 function fluorescentFixtureModel(f,out){
-  const dead=!!f.dead;
-  const casingMat=11, bulbMat=dead?12:3, socketMat=4;
-  // Shallow yellowed metal tray similar to a traditional office fluorescent fixture.
-  boxMat(f.x-.74,H-.095,f.z-.245,f.x+.74,H-.012,f.z+.245,casingMat,out);
-  // Slightly recessed central ballast strip.
-  solidBoxMat(f.x-.70,H-.071,f.z-.058,f.x+.70,H-.050,f.z+.058,casingMat,out);
-  // Darker socket blocks at both ends.
-  solidBoxMat(f.x-.62,H-.093,f.z-.165,f.x-.54,H-.059,f.z+.165,socketMat,out);
-  solidBoxMat(f.x+.54,H-.093,f.z-.165,f.x+.62,H-.059,f.z+.165,socketMat,out);
-  // Two parallel fluorescent tubes. These are rectangularized for performance but
-  // read as twin bulbs from the player viewpoint.
-  solidBoxMat(f.x-.58,H-.090,f.z-.135,f.x+.58,H-.061,f.z-.082,bulbMat,out);
-  solidBoxMat(f.x-.58,H-.090,f.z+.082,f.x+.58,H-.061,f.z+.135,bulbMat,out);
-  // Small end caps so the bulbs feel mounted into the housing.
-  solidBoxMat(f.x-.61,H-.091,f.z-.140,f.x-.58,H-.061,f.z-.078,12,out);
-  solidBoxMat(f.x+.58,H-.091,f.z-.140,f.x+.61,H-.061,f.z-.078,12,out);
-  solidBoxMat(f.x-.61,H-.091,f.z+.078,f.x-.58,H-.061,f.z+.140,12,out);
-  solidBoxMat(f.x+.58,H-.091,f.z+.078,f.x+.61,H-.061,f.z+.140,12,out);
+  const dead=!!f.dead,mode=f.mode||(dead?'dead':'normal'),axis=f.axis==='z'?'z':'x';
+  const casingMat=11, bulbMat=dead?12:(mode==='weak'?17:(mode==='flicker'?18:3)), socketMat=4;
+  if(axis==='x'){
+    boxMat(f.x-.74,H-.095,f.z-.245,f.x+.74,H-.012,f.z+.245,casingMat,out);
+    solidBoxMat(f.x-.70,H-.071,f.z-.058,f.x+.70,H-.050,f.z+.058,casingMat,out);
+    solidBoxMat(f.x-.62,H-.093,f.z-.165,f.x-.54,H-.059,f.z+.165,socketMat,out);
+    solidBoxMat(f.x+.54,H-.093,f.z-.165,f.x+.62,H-.059,f.z+.165,socketMat,out);
+    solidBoxMat(f.x-.58,H-.090,f.z-.135,f.x+.58,H-.061,f.z-.082,bulbMat,out);
+    solidBoxMat(f.x-.58,H-.090,f.z+.082,f.x+.58,H-.061,f.z+.135,bulbMat,out);
+    solidBoxMat(f.x-.61,H-.091,f.z-.140,f.x-.58,H-.061,f.z-.078,12,out);
+    solidBoxMat(f.x+.58,H-.091,f.z-.140,f.x+.61,H-.061,f.z-.078,12,out);
+    solidBoxMat(f.x-.61,H-.091,f.z+.078,f.x-.58,H-.061,f.z+.140,12,out);
+    solidBoxMat(f.x+.58,H-.091,f.z+.078,f.x+.61,H-.061,f.z+.140,12,out);
+  }else{
+    boxMat(f.x-.245,H-.095,f.z-.74,f.x+.245,H-.012,f.z+.74,casingMat,out);
+    solidBoxMat(f.x-.058,H-.071,f.z-.70,f.x+.058,H-.050,f.z+.70,casingMat,out);
+    solidBoxMat(f.x-.165,H-.093,f.z-.62,f.x+.165,H-.059,f.z-.54,socketMat,out);
+    solidBoxMat(f.x-.165,H-.093,f.z+.54,f.x+.165,H-.059,f.z+.62,socketMat,out);
+    solidBoxMat(f.x-.135,H-.090,f.z-.58,f.x-.082,H-.061,f.z+.58,bulbMat,out);
+    solidBoxMat(f.x+.082,H-.090,f.z-.58,f.x+.135,H-.061,f.z+.58,bulbMat,out);
+    solidBoxMat(f.x-.140,H-.091,f.z-.61,f.x-.078,H-.061,f.z-.58,12,out);
+    solidBoxMat(f.x-.140,H-.091,f.z+.58,f.x-.078,H-.061,f.z+.61,12,out);
+    solidBoxMat(f.x+.078,H-.091,f.z-.61,f.x+.140,H-.061,f.z-.58,12,out);
+    solidBoxMat(f.x+.078,H-.091,f.z+.58,f.x+.140,H-.061,f.z+.61,12,out);
+  }
 }
 function pxX(x){return(x-MAP_ORIGIN_X)*MAP_SCALE}
 function pxZ(z){return(z-MAP_ORIGIN_Z)*MAP_SCALE}
@@ -1698,7 +1785,7 @@ function uploadGeneratedLightMap(){
   const c=document.createElement('canvas');
   c.width=Math.round(sx*LIGHT_PPW);c.height=Math.round(sz*LIGHT_PPW);
   const g=c.getContext('2d');
-  g.fillStyle='rgb(3,3,2)';g.fillRect(0,0,c.width,c.height);
+  g.fillStyle='rgb(18,17,12)';g.fillRect(0,0,c.width,c.height);
 
   const lightLayer=document.createElement('canvas');
   lightLayer.width=c.width;lightLayer.height=c.height;
@@ -1723,66 +1810,45 @@ function uploadGeneratedLightMap(){
   }
   const lightFixtures=[],deadFixtures=[];
   for(const f of canonicalizeFixtures(gatheredFixtures))(f.dead?deadFixtures:lightFixtures).push(f);
+  const rgba=(r,g,b,a)=>`rgba(${r},${g},${b},${Math.max(0,Math.min(1,a))})`;
 
   for(const f of lightFixtures){
     const x=(f.x-lightMinX)*LIGHT_PPW,y=(f.z-lightMinZ)*LIGHT_PPW;
-    // Keep the local brightness directly under the fixture, but avoid any hard-edged
-    // or obviously shaped pool on the floor. Most of the perceived room lighting
-    // should come from broad spill that gently blends back into darkness.
-    stampSoftPool(lg,x,y,3.35*LIGHT_PPW,[
-      [0,'rgba(255,252,236,.36)'],
-      [.24,'rgba(246,237,200,.24)'],
-      [.62,'rgba(188,178,132,.10)'],
+    const strength=f.mode==='weak'?.48:(f.mode==='flicker'?.72:1.0);
+    stampSoftPool(lg,x,y,3.55*LIGHT_PPW,[
+      [0,rgba(255,252,236,.42*strength)],
+      [.24,rgba(246,237,200,.29*strength)],
+      [.62,rgba(188,178,132,.12*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
-    stampSoftPool(lg,x,y,6.35*LIGHT_PPW,[
-      [0,'rgba(212,204,156,.13)'],
-      [.28,'rgba(168,160,120,.085)'],
-      [.62,'rgba(104,103,74,.038)'],
+    stampSoftPool(lg,x,y,6.75*LIGHT_PPW,[
+      [0,rgba(220,211,165,.17*strength)],
+      [.28,rgba(174,166,124,.11*strength)],
+      [.62,rgba(108,106,78,.050*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
-    // Very broad spill that opens up the surrounding room and hallways so the light
-    // reads as ambient illumination around the fixture rather than a visible shape.
-    stampSoftPool(lg,x,y,10.25*LIGHT_PPW,[
-      [0,'rgba(122,118,86,.060)'],
-      [.34,'rgba(92,90,65,.042)'],
-      [.68,'rgba(54,54,39,.020)'],
+    // Broad overlapping spill carries illumination through open doorways and into
+    // adjacent spaces, approximating fluorescent bounce without hard light circles.
+    stampSoftPool(lg,x,y,11.25*LIGHT_PPW,[
+      [0,rgba(132,127,94,.078*strength)],
+      [.34,rgba(98,95,70,.052*strength)],
+      [.68,rgba(58,58,42,.025*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
   }
 
-  // Dead fixtures should meaningfully deepen the darkness around them, but the
-  // transition still needs to blend into the lit areas smoothly rather than
-  // looking like a hard black decal stamped onto the map.
+  // A failed fixture removes only its own local contribution. It no longer stamps
+  // a giant black crater into an otherwise illuminated room.
   for(const f of deadFixtures){
     const x=(f.x-lightMinX)*LIGHT_PPW,y=(f.z-lightMinZ)*LIGHT_PPW;
-    // Near-black core directly under the broken fixture.
-    stampSoftPool(dg,x,y,1.78*LIGHT_PPW,[
-      [0,'rgba(0,0,0,1.0)'],
-      [.26,'rgba(0,0,0,.96)'],
-      [.62,'rgba(0,0,0,.46)'],
-      [1,'rgba(0,0,0,0)']
+    stampSoftPool(dg,x,y,1.55*LIGHT_PPW,[
+      [0,'rgba(0,0,0,.38)'],[.45,'rgba(0,0,0,.22)'],[1,'rgba(0,0,0,0)']
     ]);
-    // Heavy surrounding darkness that still feels connected to the dead fixture.
-    stampSoftPool(dg,x,y,3.65*LIGHT_PPW,[
-      [0,'rgba(0,0,0,.88)'],
-      [.26,'rgba(0,0,0,.66)'],
-      [.72,'rgba(0,0,0,.22)'],
-      [1,'rgba(0,0,0,0)']
+    stampSoftPool(dg,x,y,3.9*LIGHT_PPW,[
+      [0,'rgba(0,0,0,.18)'],[.48,'rgba(0,0,0,.09)'],[1,'rgba(0,0,0,0)']
     ]);
-    // Mid-range darkness that keeps the dead zone pronounced.
-    stampSoftPool(dg,x,y,5.85*LIGHT_PPW,[
-      [0,'rgba(0,0,0,.42)'],
-      [.36,'rgba(0,0,0,.24)'],
-      [.82,'rgba(0,0,0,.07)'],
-      [1,'rgba(0,0,0,0)']
-    ]);
-    // Broad feathered blend so the darkness falls off naturally into lit areas.
-    stampSoftPool(dg,x,y,8.6*LIGHT_PPW,[
-      [0,'rgba(0,0,0,.16)'],
-      [.46,'rgba(0,0,0,.09)'],
-      [.86,'rgba(0,0,0,.028)'],
-      [1,'rgba(0,0,0,0)']
+    stampSoftPool(dg,x,y,6.6*LIGHT_PPW,[
+      [0,'rgba(0,0,0,.055)'],[.58,'rgba(0,0,0,.025)'],[1,'rgba(0,0,0,0)']
     ]);
   }
 
@@ -1827,9 +1893,9 @@ function uploadGeneratedLightMap(){
   dgb.globalAlpha=1;
 
   g.globalCompositeOperation='source-over';
-  g.globalAlpha=.80;g.drawImage(darkBlurB,0,0);
-  g.globalAlpha=.98;g.drawImage(darkBlurA,0,0);
-  g.globalAlpha=.58;g.drawImage(darkLayer,0,0);
+  g.globalAlpha=.42;g.drawImage(darkBlurB,0,0);
+  g.globalAlpha=.58;g.drawImage(darkBlurA,0,0);
+  g.globalAlpha=.32;g.drawImage(darkLayer,0,0);
   g.globalAlpha=1;
 
   // Working fixtures and broken fixtures are now handled as separate world-space
@@ -2202,7 +2268,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.19';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.20';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2277,7 +2343,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.19'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.20'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
