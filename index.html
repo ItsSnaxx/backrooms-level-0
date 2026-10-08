@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.18 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.19 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.18</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.19</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -362,7 +362,7 @@ const H=2.82,WALL_T=.32;
 // retained in memory, and reconstructed identically when the player backtracks.
 // There is deliberately no "turn around and the room changed" behavior.
 const CHUNK=26.0,ACTIVE_R=2,CEIL_GRID=.61,LIGHT_STEP=4.27;
-const rooms=[],wallRects=[],fixtures=[],noteWorld=[],exitDoors=[],pitQuads=[],stairBoxes=[];
+const rooms=[],wallRects=[],fixtures=[],noteWorld=[],exitDoors=[],pitQuads=[],stairBoxes=[],wallArrows=[];
 // Exit rooms are now progression-driven. They do not exist until a pit room has
 // actually been crossed, which prevents the player from stumbling onto an exit first.
 const dynamicExitChunks=new Map(),activePitBarriers=new Map(),pitCrossStates=new Map();
@@ -476,15 +476,22 @@ function addLPartition(def,r,x,z,orientation,scale=1){
 }
 function generateChunk(cx,cz){
   const key=cx+','+cz;if(chunkDefs.has(key))return chunkDefs.get(key);
-  const r=chunkRng(cx,cz),b=chunkBounds(cx,cz),kind=specialKind(cx,cz),def={cx,cz,kind,bounds:b,walls:[],fixtures:[],notes:[],rooms:[],doors:[],pits:[],steps:[]};
+  const r=chunkRng(cx,cz),b=chunkBounds(cx,cz),kind=specialKind(cx,cz),def={cx,cz,kind,bounds:b,walls:[],fixtures:[],notes:[],rooms:[],doors:[],pits:[],steps:[],arrows:[],style:'classic'};
   const CRAWL_H=1.24;
 
-  // Architectural room graph: compact rooms, short corridors, aligned doorways,
-  // occasional merged spaces, and rare crouch-only wall openings. Once created,
-  // the chunk is persistent and never changes when the player looks away.
-  // Ordinary Level 0 rooms use a strict 6x6 architectural graph. This keeps
-  // room scale controlled and prevents giant unfinished-looking chambers.
-  const cols=5,rows=5;
+  // Reference-driven Level 0 architectural archetypes. Neighboring chunks still
+  // share deterministic seam doorways, but their interior scale and silhouette
+  // now vary dramatically: open pillar halls, narrow runs, broad partitioned
+  // rooms, half-wall spaces, and asymmetric corner/freestanding-wall layouts.
+  const styleRoll=r();
+  let roomStyle='classic',cols=5,rows=5;
+  if(styleRoll<.19){roomStyle='open';cols=3;rows=3}
+  else if(styleRoll<.37){roomStyle='pillars';cols=3;rows=3}
+  else if(styleRoll<.54){roomStyle='corridor';if(r()<.5){cols=6;rows=3}else{cols=3;rows=6}}
+  else if(styleRoll<.70){roomStyle='halfwall';if(r()<.5){cols=4;rows=3}else{cols=3;rows=4}}
+  else if(styleRoll<.85){roomStyle='offset';cols=4;rows=4}
+  else {roomStyle='classic';cols=5;rows=5}
+  def.style=roomStyle;
   function buildCuts(a0,a1,count){
     const cuts=[a0],span=a1-a0,step=span/count;
     for(let i=1;i<count;i++){
@@ -697,11 +704,13 @@ function generateChunk(cx,cz){
     const n=opts[Math.floor(r()*opts.length)],k=edgeKey(ix,iz,n[0],n[1]);
     openEdges.add(k);treeEdges.add(k);seenCells.add(`${n[0]},${n[1]}`);stack.push(n);
   }
-  // Add loops generously enough that Level 0 continues instead of repeatedly
-  // collapsing into dead ends.
+  // Loop density is style-dependent. Open/pillar halls connect very freely;
+  // corridor chunks remain more directional while still never collapsing into
+  // the repeated dead ends that older builds produced.
+  const loopChance=roomStyle==='open'?.74:roomStyle==='pillars'?.66:roomStyle==='halfwall'?.55:roomStyle==='offset'?.46:roomStyle==='corridor'?.24:.34;
   for(let iz=0;iz<rows;iz++)for(let ix=0;ix<cols;ix++){
-    if(ix<cols-1){const k=edgeKey(ix,iz,ix+1,iz);if(!openEdges.has(k)&&r()<.30){openEdges.add(k);loopEdges.add(k)}}
-    if(iz<rows-1){const k=edgeKey(ix,iz,ix,iz+1);if(!openEdges.has(k)&&r()<.30){openEdges.add(k);loopEdges.add(k)}}
+    if(ix<cols-1){const k=edgeKey(ix,iz,ix+1,iz);if(!openEdges.has(k)&&r()<loopChance){openEdges.add(k);loopEdges.add(k)}}
+    if(iz<rows-1){const k=edgeKey(ix,iz,ix,iz+1);if(!openEdges.has(k)&&r()<loopChance){openEdges.add(k);loopEdges.add(k)}}
   }
 
   // Hard architectural rule: every ordinary room has at least TWO usable exits.
@@ -734,16 +743,24 @@ function generateChunk(cx,cz){
       for(const k of candidates){if(count>=2)break;if(!openEdges.has(k)){openEdges.add(k);loopEdges.add(k);count++}}
     }
   }
-  const rowBias=Array.from({length:rows},()=>crr(r,.38,.62));
-  const colBias=Array.from({length:cols},()=>crr(r,.38,.62));
+  const rowBias=Array.from({length:rows},()=>crr(r,roomStyle==='corridor'?.32:.30,roomStyle==='corridor'?.68:.70));
+  const colBias=Array.from({length:cols},()=>crr(r,roomStyle==='corridor'?.32:.30,roomStyle==='corridor'?.68:.70));
+  const mergedOpeningChance=roomStyle==='open'?.58:roomStyle==='pillars'?.46:roomStyle==='halfwall'?.28:roomStyle==='offset'?.16:.0;
+  function passageWidth(span){
+    if(roomStyle==='open')return Math.min(span-.82,crr(r,3.7,Math.max(3.9,span*.84)));
+    if(roomStyle==='pillars')return Math.min(span-.82,crr(r,3.1,Math.max(3.3,span*.72)));
+    if(roomStyle==='halfwall')return Math.min(span-.82,crr(r,2.6,Math.max(2.8,span*.60)));
+    if(roomStyle==='offset')return Math.min(span-.82,crr(r,2.15,Math.max(2.35,span*.48)));
+    if(roomStyle==='corridor')return crr(r,1.78,2.04);
+    return crr(r,1.86,2.22);
+  }
   for(let ix=1;ix<cols;ix++){
     const x=xs[ix];
     for(let iz=0;iz<rows;iz++){
       const z0=zs[iz],z1=zs[iz+1],k=edgeKey(ix-1,iz,ix,iz);
       if(openEdges.has(k)){
-        const crawl=false;
-        const gapW=crr(r,1.82,2.14);
-        verticalOpening(x,z0,z1,z0+(z1-z0)*rowBias[iz],gapW,false);
+        if(r()<mergedOpeningChance)continue; // fully merge adjacent cells into a broad hall
+        verticalOpening(x,z0,z1,z0+(z1-z0)*rowBias[iz],passageWidth(z1-z0),false);
       }else roomWallX(x,z0,z1);
     }
   }
@@ -752,15 +769,62 @@ function generateChunk(cx,cz){
     for(let ix=0;ix<cols;ix++){
       const x0=xs[ix],x1=xs[ix+1],k=edgeKey(ix,iz-1,ix,iz);
       if(openEdges.has(k)){
-        const crawl=false;
-        const gapW=crr(r,1.82,2.14);
-        horizontalOpening(z,x0,x1,x0+(x1-x0)*colBias[ix],gapW,false);
+        if(r()<mergedOpeningChance)continue;
+        horizontalOpening(z,x0,x1,x0+(x1-x0)*colBias[ix],passageWidth(x1-x0),false);
       }else roomWallZ(z,x0,x1);
     }
   }
 
-  // No decorative free-standing wall stubs are added here. Every ordinary wall
-  // is now a complete room boundary, a real doorway, or a chunk seam.
+  // Reference-photo architectural details. These are real collision geometry,
+  // never cosmetic wall slivers, and are kept well inside rooms so they cannot
+  // interfere with shared chunk seams or create unwalkable cracks.
+  function addPillar(rm,w=1.02,d=1.02,ox=0,oz=0){
+    const x=(rm.x0+rm.x1)*.5+ox,z=(rm.z0+rm.z1)*.5+oz;
+    if(x-w*.5<rm.x0+.72||x+w*.5>rm.x1-.72||z-d*.5<rm.z0+.72||z+d*.5>rm.z1-.72)return;
+    pushWall({x0:x-w*.5,z0:z-d*.5,x1:x+w*.5,z1:z+d*.5});
+  }
+  function addHalfWall(rm,vertical){
+    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(rw<5.2||rd<5.2)return;
+    const hh=crr(r,1.02,1.22);
+    if(vertical){
+      const x=crr(r,rm.x0+rw*.34,rm.x1-rw*.34),len=Math.min(rd*.54,crr(r,2.7,4.5)),z=(rm.z0+rm.z1)*.5;
+      pushWall({x0:x-WALL_T*.5,z0:z-len*.5,x1:x+WALL_T*.5,z1:z+len*.5,y0:0,y1:hh,halfWall:true});
+    }else{
+      const z=crr(r,rm.z0+rd*.34,rm.z1-rd*.34),len=Math.min(rw*.54,crr(r,2.7,4.5)),x=(rm.x0+rm.x1)*.5;
+      pushWall({x0:x-len*.5,z0:z-WALL_T*.5,x1:x+len*.5,z1:z+WALL_T*.5,y0:0,y1:hh,halfWall:true});
+    }
+  }
+  function addFreestandingPartition(rm,vertical){
+    const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(rw<5.0||rd<5.0)return;
+    if(vertical){
+      const len=Math.min(rd*.48,crr(r,2.5,4.2)),x=crr(r,rm.x0+1.55,rm.x1-1.55),z=(rm.z0+rm.z1)*.5+crr(r,-rd*.10,rd*.10);
+      pushWall({x0:x-WALL_T*.5,z0:z-len*.5,x1:x+WALL_T*.5,z1:z+len*.5,featureWall:true});
+    }else{
+      const len=Math.min(rw*.48,crr(r,2.5,4.2)),z=crr(r,rm.z0+1.55,rm.z1-1.55),x=(rm.x0+rm.x1)*.5+crr(r,-rw*.10,rw*.10);
+      pushWall({x0:x-len*.5,z0:z-WALL_T*.5,x1:x+len*.5,z1:z+WALL_T*.5,featureWall:true});
+    }
+  }
+  if(roomStyle==='pillars'||roomStyle==='open'){
+    let placed=0;
+    for(const rm of def.rooms){
+      const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;
+      if(rw>6.1&&rd>6.1&&r()<(roomStyle==='pillars'?.62:.28)){
+        addPillar(rm,crr(r,.90,1.24),crr(r,.90,1.24),crr(r,-rw*.12,rw*.12),crr(r,-rd*.12,rd*.12));
+        if(++placed>=(roomStyle==='pillars'?6:3))break;
+      }
+    }
+  }
+  if(roomStyle==='halfwall'){
+    let placed=0;for(const rm of def.rooms){if(r()<.42){addHalfWall(rm,r()<.5);if(++placed>=4)break}}
+  }
+  if(roomStyle==='offset'){
+    let placed=0;for(const rm of def.rooms){if(r()<.34){addFreestandingPartition(rm,r()<.5);if(++placed>=5)break}}
+  }
+  if(roomStyle==='corridor'){
+    // Repeated square columns/wall fins create the long staggered views seen in
+    // narrow Level 0 references without turning the run into a dead end.
+    let placed=0;for(const rm of def.rooms){const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;if(Math.max(rw,rd)>6.2&&r()<.22){addPillar(rm,.82,.82,crr(r,-rw*.16,rw*.16),crr(r,-rd*.16,rd*.16));if(++placed>=4)break}}
+  }
 
   // Chunk seams use one deterministic shared doorway specification, including
   // special chunks, so adjacent architecture never leaves accidental slits.
@@ -825,6 +889,42 @@ function generateChunk(cx,cz){
   // If a future generator accidentally marks anything as a crawl segment, remove
   // that special behavior before it reaches rendering/collision.
   for(const w of def.walls)if(w.crawl)w.crawl=false;
+
+  // Rare hand-painted directional arrows, inspired by found-footage/reference
+  // imagery. They are intentionally unreliable: some genuinely bias toward the
+  // current exit (when one exists) or the nearest planned pit transition, while
+  // the rest point the wrong way. They are environmental storytelling, not HUD.
+  function guidanceTarget(){
+    if(activeExitKey){const p=activeExitKey.split(','),eb=chunkBounds(Number(p[0]),Number(p[1]));return{x:(eb.x0+eb.x1)*.5,z:(eb.z0+eb.z1)*.5,type:'exit'}}
+    let best=null,bd=1e18,rsx=Math.floor(cx/SPECIAL_REGION),rsz=Math.floor(cz/SPECIAL_REGION);
+    for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){
+      const gp=regionPlan(rsx+dx,rsz+dz).grid,gb=chunkBounds(gp.x,gp.z),gx=(gb.x0+gb.x1)*.5,gz=(gb.z0+gb.z1)*.5,d=(gx-(b.x0+b.x1)*.5)**2+(gz-(b.z0+b.z1)*.5)**2;
+      if(d<bd){bd=d;best={x:gx,z:gz,type:'pit'}}
+    }
+    return best;
+  }
+  if(r()<.105){
+    const candidates=def.walls.filter(w=>!w.invisible&&!w.door&&!w.halfWall&&(w.y0||0)<.01&&(w.y1||H)>H-.01&&Math.max(w.x1-w.x0,w.z1-w.z0)>3.25);
+    if(candidates.length){
+      const w=candidates[Math.floor(r()*candidates.length)],vertical=(w.x1-w.x0)<(w.z1-w.z0),target=guidanceTarget(),helpful=r()<.56;
+      const count=r()<.28?(r()<.35?3:2):1;
+      const centerX=(w.x0+w.x1)*.5,centerZ=(w.z0+w.z1)*.5;
+      let trueDir=1;
+      if(target)trueDir=vertical?(target.z>=centerZ?1:-1):(target.x>=centerX?1:-1);
+      const dir=helpful?trueDir:(r()<.78?-trueDir:(r()<.5?1:-1));
+      const face=r()<.5?-1:1;
+      for(let i=0;i<count;i++){
+        const shift=(i-(count-1)*.5)*.48;
+        if(vertical){
+          const z=Math.max(w.z0+.75,Math.min(w.z1-.75,centerZ+shift));
+          def.arrows.push({vertical:true,x:face>0?w.x1+.012:w.x0-.012,z,face,dir,helpful,target:target?target.type:'none'});
+        }else{
+          const x=Math.max(w.x0+.75,Math.min(w.x1-.75,centerX+shift));
+          def.arrows.push({vertical:false,x,z:face>0?w.z1+.012:w.z0-.012,face,dir,helpful,target:target?target.type:'none'});
+        }
+      }
+    }
+  }
 
   // Mostly working, permanently static fixtures. Their state never changes at runtime.
   for(const rm of def.rooms){
@@ -1247,9 +1347,15 @@ void main(){
     // Brushed silver hotel-style lock plate and lever.
     float metal=.82+.18*n2(vec2((vP.x+vP.z)*8.0,vP.y*6.0));
     base=vec3(.43,.44,.40)*metal;
-  }else{
+  }else if(vM<15.5){
     // The room beyond an exit is intentionally absolute black.
     base=vec3(.00025,.00022,.00018);
+  }else{
+    // Dry black wall paint used for rare directional arrows. It stays dark, but
+    // still responds enough to nearby fluorescent spill / flashlight to read as
+    // paint on wallpaper rather than a hole cut through the wall.
+    float paint=.86+.14*n2(vec2((vP.x+vP.z)*9.0,vP.y*7.0));
+    base=vec3(.016,.014,.010)*paint;
   }
   if(blood>0.){vec3 bloodCol=mix(vec3(.070,.010,.014),vec3(.135,.028,.032),clamp(blood*1.2,0.,1.));base=mix(base,bloodCol,clamp(blood*.78,0.,.88));}
 
@@ -1277,6 +1383,7 @@ void main(){
   if(vM>10.5&&vM<11.5)local=vec3(.018,.016,.011)+lampTint*(lm*.16+bloomField*.11);
   if(vM>11.5&&vM<12.5)local=vec3(.0045,.0043,.0038);
   if(vM>12.5)local=vec3(.004,.004,.0035);
+  if(vM>15.5)local=vec3(.12,.115,.09)+lampTint*(lm*.62+bloomField*.16);
 
   vec3 toP=vP-uCam;float d=length(toP);vec3 dir=normalize(toP);
   float cone=smoothstep(.70,.955,dot(dir,normalize(uFwd)));
@@ -1381,6 +1488,7 @@ function wallBoxY(x0,y0,z0,x1,y1,z1,out){
   quad([x1,y0,z1],[x0,y0,z1],[x0,y1,z1],[x1,y1,z1],[0,0,1],0,out);
   quad([x0,y0,z1],[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[-1,0,0],0,out);
   quad([x1,y0,z0],[x1,y0,z1],[x1,y1,z1],[x1,y1,z0],[1,0,0],0,out);
+  if(y1<H-.001)quad([x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1],[0,1,0],0,out);
   if(y0>.001)quad([x0,y0,z1],[x1,y0,z1],[x1,y0,z0],[x0,y0,z0],[0,-1,0],0,out);
 }
 function wallBox(x0,z0,x1,z1,out){wallBoxY(x0,0,z0,x1,H,z1,out)}
@@ -1402,6 +1510,17 @@ function orientedPrism(cx,cz,y0,y1,ux,uz,hu,vx,vz,hv,mat,out){
   quad(a,b,c,d,[-vx,0,-vz],mat,out);quad(f,e,h,g,[vx,0,vz],mat,out);
   quad(e,a,d,h,[-ux,0,-uz],mat,out);quad(b,f,g,c,[ux,0,uz],mat,out);
   quad(d,c,g,h,[0,1,0],mat,out);quad(e,f,b,a,[0,-1,0],mat,out);
+}
+function arrowDecalModel(a,out){
+  // Flat, imperfect-looking black wall arrow. Material 15 is the same absolute
+  // dark used by the exit void, which makes the paint read clearly in flashlight
+  // spill without introducing a new texture or expensive decal pass.
+  const y=.98+(Math.abs((a.x*7+a.z*11))%1)*.28,shaftH=.105,tail=.42,neck=.13,tip=.50,headH=.29;
+  const n=a.vertical?[a.face,0,0]:[0,0,a.face];
+  const P=(u,yy)=>a.vertical?[a.x,yy,a.z+a.dir*u]:[a.x+a.dir*u,yy,a.z];
+  quad(P(-tail,y-shaftH),P(neck,y-shaftH),P(neck,y+shaftH),P(-tail,y+shaftH),n,16,out);
+  const p1=P(neck-.03,y-headH),p2=P(tip,y),p3=P(neck-.03,y+headH);
+  quad(p1,p2,p3,p3,n,16,out);
 }
 function doorBasis(d){
   if(d.side==='east')return{nx:1,nz:0,tx:0,tz:1};
@@ -1467,11 +1586,11 @@ function pxZ(z){return(z-MAP_ORIGIN_Z)*MAP_SCALE}
 
 function rebuildActiveWorld(cx,cz,force=false){
   if(!force&&cx===activeChunkX&&cz===activeChunkZ)return;
-  activeChunkX=cx;activeChunkZ=cz;rooms.length=wallRects.length=fixtures.length=noteWorld.length=exitDoors.length=pitQuads.length=stairBoxes.length=0;
+  activeChunkX=cx;activeChunkZ=cz;rooms.length=wallRects.length=fixtures.length=noteWorld.length=exitDoors.length=pitQuads.length=stairBoxes.length=wallArrows.length=0;
   renderMinX=(cx-ACTIVE_R)*CHUNK-CHUNK*.5;renderMaxX=(cx+ACTIVE_R)*CHUNK+CHUNK*.5;
   renderMinZ=(cz-ACTIVE_R)*CHUNK-CHUNK*.5;renderMaxZ=(cz+ACTIVE_R)*CHUNK+CHUNK*.5;
   for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
-    const d=generateChunk(cx+dx,cz+dz);if(d.kind==='grid')registerPitBarrier(d);wallRects.push(...d.walls);fixtures.push(...d.fixtures);noteWorld.push(...d.notes);exitDoors.push(...d.doors);pitQuads.push(...d.pits);stairBoxes.push(...d.steps);
+    const d=generateChunk(cx+dx,cz+dz);if(d.kind==='grid')registerPitBarrier(d);wallRects.push(...d.walls);fixtures.push(...d.fixtures);noteWorld.push(...d.notes);exitDoors.push(...d.doors);pitQuads.push(...d.pits);stairBoxes.push(...d.steps);wallArrows.push(...(d.arrows||[]));
   }
   appendPitBarrierWalls();
 
@@ -1557,6 +1676,7 @@ function buildWorld(){
     if(w.invisible)continue;
     const y0=w.y0||0,y1=w.y1||H;wallBoxY(w.x0,y0,w.z0,w.x1,y1,w.z1,out);
   }
+  for(const a of wallArrows)arrowDecalModel(a,out);
   for(const f of fixtures)fluorescentFixtureModel(f,out);
   // Level 0 cleanup: no stray gray step/frame boxes are rendered.
   for(const d of exitDoors)doorFrameAndVoidModel(d,out);
@@ -2082,7 +2202,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.18';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.19';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2157,7 +2277,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.18'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.19'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
