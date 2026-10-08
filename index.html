@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.21 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.22 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.21</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.22</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -422,12 +422,12 @@ function snap(v,g=CEIL_GRID){return Math.round(v/g)*g}
 function fixtureKey(x,z){return Math.round(snap(x,CEIL_GRID)/CEIL_GRID)+','+Math.round(snap(z,CEIL_GRID)/CEIL_GRID)}
 function fixtureModeAt(x,z){
   // One authoritative fixture condition per world-space ceiling position.
-  // Most lights are healthy; weak/flickering/dead fixtures are atmospheric exceptions.
+  // Build 0.9.22 keeps most fixtures healthy while preserving occasional dark zones.
   const ix=Math.round(snap(x,CEIL_GRID)/CEIL_GRID),iz=Math.round(snap(z,CEIL_GRID)/CEIL_GRID);
   const h=mix32((worldSeed^Math.imul(ix,0x6d2b79f5)^Math.imul(iz,0x1b873593)^0x4f1bbcdc)>>>0)/4294967296;
-  if(h<.060)return'dead';
-  if(h<.130)return'weak';
-  if(h<.180)return'flicker';
+  if(h<.050)return'dead';
+  if(h<.110)return'weak';
+  if(h<.160)return'flicker';
   return'normal';
 }
 function fixtureDeadAt(x,z){return fixtureModeAt(x,z)==='dead'}
@@ -1010,17 +1010,17 @@ function generateChunk(cx,cz){
     }
   }
 
-  // Sparse fluorescent coverage. The previous build treated every tiny grid cell
-  // like a separate office and over-lit it. Now many small connected spaces share
-  // spill from neighboring fixtures, while genuinely large rooms still receive a
-  // few logical lights so they never become accidental black voids.
-  function placeRoomFixture(px,pz,roomList,axis='x',forceOn=false){
-    const tries=[[0,0],[.70,0],[-.70,0],[0,.70],[0,-.70],[.58,.58],[-.58,.58],[.58,-.58],[-.58,-.58]];
+  // Balanced fluorescent coverage. Geometry is unchanged from 0.9.21; only the
+  // ceiling-light plan is rebuilt here. Fixtures use room dimensions and a minimum
+  // separation so large rooms receive evenly spaced rows instead of random clusters.
+  function placeRoomFixture(px,pz,roomList,axis='x',forceOn=false,minSep=3.85){
+    const tries=[[0,0],[.61,0],[-.61,0],[0,.61],[0,-.61],[.61,.61],[-.61,.61],[.61,-.61],[-.61,-.61]];
     for(const o of tries){
       const x=snap(px+o[0],CEIL_GRID),z=snap(pz+o[1],CEIL_GRID);let clear=true;
-      for(const w of def.walls)if(pointAabbDist2(x,z,w)<.78*.78){clear=false;break}
+      for(const w of def.walls)if(pointAabbDist2(x,z,w)<.76*.76){clear=false;break}
       if(!clear)continue;
       const k=fixtureKey(x,z);if(def.fixtures.some(f=>fixtureKey(f.x,f.z)===k))continue;
+      if(def.fixtures.some(f=>{const dx=f.x-x,dz=f.z-z;return dx*dx+dz*dz<minSep*minSep}))continue;
       const mode=forceOn?'normal':fixtureModeAt(x,z),f={x,z,mode,dead:mode==='dead',axis:axis==='z'?'z':'x',forceOn:!!forceOn};
       def.fixtures.push(f);roomList.push(f);return f;
     }
@@ -1029,33 +1029,47 @@ function generateChunk(cx,cz){
   for(const rm of def.rooms){
     const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0,area=rw*rd,fixtureAxis=rd>rw*1.22?'z':'x';
     const roomLights=[];
-    let chance=roomStyle==='corridor'?.52:.40;
-    if(area>46)chance=.58;if(area>70)chance=.78;if(area>105)chance=.95;
     const isSpawnRoom=cx===0&&cz===0&&0>rm.x0&&0<rm.x1&&0>rm.z0&&0<rm.z1;
-    if(isSpawnRoom||r()<chance){
+    const long=Math.max(rw,rd),short=Math.min(rw,rd);
+    // Tiny connecting cells may share light with neighbors. Medium and large rooms
+    // get deterministic coverage, with spacing deliberately wider than 0.9.20.
+    let shouldLight=isSpawnRoom || area>=34 || r()<(area<18?.58:.78);
+    if(!shouldLight)continue;
+    let spacing=roomStyle==='corridor'?7.35:(roomStyle==='open'?6.85:6.95);
+    let nx=Math.max(1,Math.min(3,Math.ceil(rw/spacing)));
+    let nz=Math.max(1,Math.min(3,Math.ceil(rd/spacing)));
+    if(long>short*1.45){if(rw>=rd)nz=1;else nx=1}
+    // Small/medium rooms stay restrained: one fixture unless their footprint truly
+    // needs more coverage. Large spaces receive a logical row/grid automatically.
+    if(area<48){nx=1;nz=1}
+    else if(area<82){if(rw>=rd){nx=Math.min(2,nx);nz=1}else{nz=Math.min(2,nz);nx=1}}
+    for(let iz=0;iz<nz;iz++)for(let ix=0;ix<nx;ix++){
+      const x=rm.x0+(ix+.5)*rw/nx,z=rm.z0+(iz+.5)*rd/nz;
+      placeRoomFixture(x,z,roomLights,fixtureAxis,isSpawnRoom&&roomLights.length===0,3.85);
+    }
+    // A truly large room must not be left dark because one proposed ceiling point
+    // happened to collide with a divider. Seed one healthy central fallback.
+    if((area>=70||isSpawnRoom)&&(!roomLights.length||roomLights.every(f=>f.dead))){
       const cxm=(rm.x0+rm.x1)*.5,czm=(rm.z0+rm.z1)*.5;
-      placeRoomFixture(cxm,czm,roomLights,fixtureAxis,isSpawnRoom);
-      // Only elongated/large spaces earn a second tube. Truly large landmark
-      // spaces can receive a third, but never the dense ceiling grids from 0.9.21.
-      const long=Math.max(rw,rd);
-      if((area>64||long>10.5)&&r()<.52){
-        if(rw>=rd)placeRoomFixture(rm.x0+rw*.72,czm,roomLights,'x');
-        else placeRoomFixture(cxm,rm.z0+rd*.72,roomLights,'z');
-      }
-      if(area>120&&r()<.34){
-        if(rw>=rd)placeRoomFixture(rm.x0+rw*.28,czm,roomLights,'x');
-        else placeRoomFixture(cxm,rm.z0+rd*.28,roomLights,'z');
-      }
+      const f=placeRoomFixture(cxm,czm,roomLights,fixtureAxis,true,3.2);
+      if(!f&&roomLights.length){roomLights[0].forceOn=true;roomLights[0].mode='normal';roomLights[0].dead=false}
     }
   }
-  // Chunk-level safeguard: sparse does not mean broken. If a particularly unlucky
-  // chunk generated almost no usable light, seed a few widely separated fixtures.
-  const minChunkLights=roomStyle==='open'?5:roomStyle==='corridor'?6:5;
+  // Chunk safeguard only fills the largest available rooms and still respects
+  // spacing, preventing the "two lights stuck together" look.
+  const minChunkLights=roomStyle==='open'?8:roomStyle==='corridor'?8:7;
   if(def.fixtures.length<minChunkLights){
     const order=[...def.rooms].sort((a,b)=>((b.x1-b.x0)*(b.z1-b.z0))-((a.x1-a.x0)*(a.z1-a.z0)));
-    for(const rm of order){
-      if(def.fixtures.length>=minChunkLights)break;
-      placeRoomFixture((rm.x0+rm.x1)*.5,(rm.z0+rm.z1)*.5,[],(rm.z1-rm.z0)>(rm.x1-rm.x0)?'z':'x');
+    let pass=0;
+    while(def.fixtures.length<minChunkLights&&pass<2){
+      for(const rm of order){
+        if(def.fixtures.length>=minChunkLights)break;
+        const rw=rm.x1-rm.x0,rd=rm.z1-rm.z0;
+        const offsets=rw>=rd?[[.5,.5],[.28,.5],[.72,.5]]:[[.5,.5],[.5,.28],[.5,.72]];
+        const o=offsets[Math.min(pass+1,offsets.length-1)];
+        placeRoomFixture(rm.x0+rw*o[0],rm.z0+rd*o[1],[],rd>rw?'z':'x',false,3.85);
+      }
+      pass++;
     }
   }
 
@@ -1490,14 +1504,14 @@ void main(){
   float lmRaw=texture2D(uLightMap,clamp(lmuv,vec2(0.001),vec2(.999))).r;
   // The lightmap has a very dark storage floor. Remove that floor before using
   // it so unlit geometry stays genuinely dark rather than receiving a fake fill.
-  float lm=pow(clamp((lmRaw-.024)/.976,0.0,1.0),.88);
+  float lm=pow(clamp((lmRaw-.027)/.973,0.0,1.0),.84);
   float nd=.64+.36*max(0.,dot(normalize(vN),normalize(vec3(.10,.98,.12))));
   // A gentle fluorescent/indirect baseline keeps ordinary Level 0 navigable even
   // between fixtures. The actual pools and room-to-room spill still come from the
   // persistent lightmap, so failed lights remain meaningful.
-  vec3 ambient=vec3(.0135,.0130,.0105);
+  vec3 ambient=vec3(.0205,.0198,.0158);
   vec3 lampTint=vec3(.99,.95,.74);
-  vec3 local=(ambient + lampTint*(lm*.82))*mix(.61,.96,nd);
+  vec3 local=(ambient + lampTint*(lm*.86))*mix(.62,.96,nd);
   float bloomField=pow(clamp(lm,0.0,1.0),1.22);
   if(vM<.5)local+=lampTint*bloomField*.11;
   if(vM>0.5&&vM<1.5)local+=lampTint*bloomField*.17;
@@ -1528,11 +1542,11 @@ void main(){
   }
   // Distance haze is subtle nearby and only becomes strong through several rooms.
   // It darkens progressively instead of snapping architecture into blackness.
-  float fog=1.0-exp(-pow(max(0.,d-4.0)*.102,1.16));
-  fog=clamp(fog,0.,.93);
+  float fog=1.0-exp(-pow(max(0.,d-4.7)*.088,1.17));
+  fog=clamp(fog,0.,.91);
   float beamPierce=uFlash*cone*flashRange*.52;
   fog*=1.0-beamPierce;
-  vec3 fogCol=vec3(.024,.023,.015);
+  vec3 fogCol=vec3(.035,.034,.022);
   col=mix(col,fogCol,fog);
   // Fine monochrome film/sensor grain. It updates at a camera-like cadence
   // and is strongest in shadows/midtones, while highlights stay relatively clean.
@@ -1866,24 +1880,24 @@ function uploadGeneratedLightMap(){
   for(const f of lightFixtures){
     const x=(f.x-lightMinX)*LIGHT_PPW,y=(f.z-lightMinZ)*LIGHT_PPW;
     const strength=f.mode==='weak'?.48:(f.mode==='flicker'?.72:1.0);
-    stampSoftPool(lg,x,y,2.85*LIGHT_PPW,[
-      [0,rgba(255,252,236,.34*strength)],
-      [.26,rgba(246,237,200,.22*strength)],
-      [.64,rgba(188,178,132,.082*strength)],
+    stampSoftPool(lg,x,y,3.15*LIGHT_PPW,[
+      [0,rgba(255,252,236,.37*strength)],
+      [.26,rgba(246,237,200,.245*strength)],
+      [.64,rgba(188,178,132,.095*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
-    stampSoftPool(lg,x,y,5.15*LIGHT_PPW,[
-      [0,rgba(220,211,165,.115*strength)],
-      [.30,rgba(174,166,124,.072*strength)],
-      [.64,rgba(108,106,78,.030*strength)],
+    stampSoftPool(lg,x,y,5.75*LIGHT_PPW,[
+      [0,rgba(220,211,165,.135*strength)],
+      [.30,rgba(174,166,124,.086*strength)],
+      [.64,rgba(108,106,78,.037*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
     // A softer outer spill lets bright rooms bleed into connected hallways without
     // making every adjacent room share the same exposure.
-    stampSoftPool(lg,x,y,8.35*LIGHT_PPW,[
-      [0,rgba(132,127,94,.040*strength)],
-      [.36,rgba(98,95,70,.026*strength)],
-      [.70,rgba(58,58,42,.012*strength)],
+    stampSoftPool(lg,x,y,9.25*LIGHT_PPW,[
+      [0,rgba(132,127,94,.050*strength)],
+      [.36,rgba(98,95,70,.032*strength)],
+      [.70,rgba(58,58,42,.015*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
   }
@@ -1908,23 +1922,23 @@ function uploadGeneratedLightMap(){
   const blurA=document.createElement('canvas');
   blurA.width=c.width;blurA.height=c.height;
   const ga=blurA.getContext('2d');
-  ga.filter='blur(10px)';
+  ga.filter='blur(11px)';
   ga.drawImage(lightLayer,0,0);
 
   const blurB=document.createElement('canvas');
   blurB.width=c.width;blurB.height=c.height;
   const gb=blurB.getContext('2d');
-  gb.filter='blur(22px)';
-  gb.globalAlpha=.72;
+  gb.filter='blur(25px)';
+  gb.globalAlpha=.80;
   gb.drawImage(lightLayer,0,0);
   gb.globalAlpha=1;
 
   g.globalCompositeOperation='lighter';
-  g.globalAlpha=.62;g.drawImage(blurB,0,0);
-  g.globalAlpha=.58;g.drawImage(blurA,0,0);
+  g.globalAlpha=.66;g.drawImage(blurB,0,0);
+  g.globalAlpha=.60;g.drawImage(blurA,0,0);
   // Add back a lighter version of the original field so the source area still feels
   // brightest, but without bringing back an obvious floor decal shape.
-  g.globalAlpha=.24;g.drawImage(lightLayer,0,0);
+  g.globalAlpha=.25;g.drawImage(lightLayer,0,0);
   g.globalAlpha=1;
 
   // Blend in darkness around broken fixtures after the light pass. The added blur
@@ -2319,7 +2333,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.21';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.22';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2394,7 +2408,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.21'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.22'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
