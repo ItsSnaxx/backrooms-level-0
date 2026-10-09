@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.23 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.24 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.23</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.24</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -422,7 +422,9 @@ function snap(v,g=CEIL_GRID){return Math.round(v/g)*g}
 function fixtureKey(x,z){return Math.round(snap(x,CEIL_GRID)/CEIL_GRID)+','+Math.round(snap(z,CEIL_GRID)/CEIL_GRID)}
 function fixtureModeAt(x,z){
   // One authoritative fixture condition per world-space ceiling position.
-  // Build 0.9.23 preserves the 0.9.22 lighting and generation; this pass only fixes the fluorescent hum loop.
+  // Build 0.9.24 preserves the 0.9.22 lighting and 0.9.21 generation exactly.
+  // This pass only replaces the fluorescent hum playback path with continuous
+  // oscillator-based ballast voices, eliminating audio-file loop boundaries entirely.
   const ix=Math.round(snap(x,CEIL_GRID)/CEIL_GRID),iz=Math.round(snap(z,CEIL_GRID)/CEIL_GRID);
   const h=mix32((worldSeed^Math.imul(ix,0x6d2b79f5)^Math.imul(iz,0x1b873593)^0x4f1bbcdc)>>>0)/4294967296;
   if(h<.050)return'dead';
@@ -2060,7 +2062,7 @@ function setIntroHumMuted(muted){
  try{
   if(fixtureHumFallback){
    fixtureHumFallback.muted=false;
-   fixtureHumFallback.volume=introHumMuted?0:(fixtureHumBuffer?.09:.18);
+   fixtureHumFallback.volume=introHumMuted?0:.18;
   }
  }catch(_){}
  if(audio&&fixtureHumVoices.length){
@@ -2119,22 +2121,51 @@ function unlockProvidedMedia(){
  try{if(bodyFallFallback){bodyFallFallback.muted=true;bodyFallFallback.volume=.01;const p=bodyFallFallback.play();if(p&&p.then)p.then(()=>{bodyFallFallback.pause();bodyFallFallback.currentTime=0;bodyFallFallback.muted=false;bodyFallFallback.volume=.86}).catch(()=>{bodyFallFallback.muted=false;bodyFallFallback.volume=.86})}}catch(_){ }
 }
 function initFixtureHumVoices(){
- if(!audio||!master||!fixtureHumBuffer||fixtureHumVoices.length)return;
+ // Do NOT loop the recorded hum here. iOS/Safari can expose a brief silence at
+ // an encoded-media or buffer loop boundary. These ballast voices are built from
+ // continuously running oscillators, so there is literally no loop point to gap.
+ if(!audio||!master||fixtureHumVoices.length)return;
  try{
-  const count=6;
+  const count=6,t0=audio.currentTime+.01;
   for(let i=0;i<count;i++){
-   const src=audio.createBufferSource(),p=audio.createPanner(),lp=audio.createBiquadFilter(),g=audio.createGain();
-   src.buffer=fixtureHumBuffer;src.loop=true;src.loopStart=0;src.loopEnd=fixtureHumBuffer.duration;
+   const p=audio.createPanner(),toneBus=audio.createGain(),lp=audio.createBiquadFilter(),g=audio.createGain();
    p.panningModel='equalpower';p.distanceModel='inverse';p.refDistance=3.0;p.maxDistance=24;p.rolloffFactor=.72;
-   lp.type='lowpass';lp.frequency.value=6500;g.gain.value=.0001;
-   src.connect(lp);lp.connect(p);p.connect(g);g.connect(master);
-   src.start(0,(fixtureHumBuffer.duration*(i/count))%fixtureHumBuffer.duration);
-   fixtureHumVoices.push({src,p,g,key:''});
+   lp.type='lowpass';lp.frequency.value=3600;lp.Q.value=.35;
+   toneBus.gain.value=1;g.gain.value=.0001;
+   toneBus.connect(lp);lp.connect(p);p.connect(g);g.connect(master);
+
+   // Slight per-fixture detuning prevents six nearby fixtures from collapsing
+   // into one sterile pure tone while preserving the familiar 60/120 Hz hum.
+   const drift=(i-2.5)*.055;
+   const partials=[
+    {f:59.92+drift, type:'sine',     a:.12},
+    {f:119.84+drift*2,type:'sine',   a:.34},
+    {f:120.42-drift*1.5,type:'sine', a:.20},
+    {f:239.7+drift*3,type:'triangle',a:.105},
+    {f:479.4-drift*4,type:'sine',    a:.040}
+   ];
+   const oscs=[];
+   for(const q of partials){
+    const o=audio.createOscillator(),og=audio.createGain();
+    o.type=q.type;o.frequency.value=q.f;og.gain.value=q.a;
+    o.connect(og);og.connect(toneBus);o.start(t0);oscs.push(o);
+   }
+
+   // A very slow, tiny ballast-level breathing motion keeps the hum organic.
+   // It modulates continuously; it never mutes the voice or restarts it.
+   const lfo=audio.createOscillator(),lfoGain=audio.createGain();
+   lfo.type='sine';lfo.frequency.value=.23+i*.037;lfoGain.gain.value=.055;
+   lfo.connect(lfoGain);lfoGain.connect(toneBus.gain);lfo.start(t0);
+
+   fixtureHumVoices.push({oscs,lfo,p,g,key:''});
   }
+  stopFixtureHumFallback();
+  updateFixtureHum(true);
+  console.info('Continuous fluorescent ballast hum ready (no loop boundary)');
  }catch(e){console.warn('Fixture hum spatial layer unavailable:',e);fixtureHumVoices=[]}
 }
 function updateFixtureHum(force=false){
- if(!audio||!fixtureHumBuffer||!fixtureHumVoices.length)return;
+ if(!audio||!fixtureHumVoices.length)return;
  setListenerPose();
  if(introHumMuted){const t=audio.currentTime;for(const v of fixtureHumVoices)v.g.gain.setTargetAtTime(.0001,t,.025);return}
  if(!force&&worldTime-lastHumAssign<.25)return;lastHumAssign=worldTime;
@@ -2170,25 +2201,24 @@ function playBodyFallLayer(){
 }
 function beginProvidedAudioDecode(){
  if(!audio||audioDecodeStarted)return;audioDecodeStarted=true;
- setTimeout(()=>{if(!audio)return;Promise.allSettled([decodeBuffer(FIXTURE_HUM_AUDIO),decodeBuffer(FOOTSTEP_AUDIO)]).then(res=>{
-  if(res[0].status==='fulfilled'){
-   fixtureHumBuffer=makeSeamlessHumLoop(res[0].value,.18);
-   initFixtureHumVoices();updateFixtureHum(true);stopFixtureHumFallback();
-   console.info('Fluorescent seamless loop ready:',fixtureHumBuffer.duration.toFixed(2)+'s')
-  }else console.warn('Hum decode failed:',res[0].reason);
-  if(res[1].status==='fulfilled'){footstepBuffer=res[1].value;console.info('Footstep recording ready:',footstepBuffer.duration.toFixed(2)+'s')}else console.warn('Footstep decode failed:',res[1].reason);
+ // The fluorescent layer is procedural in 0.9.24 and never needs decoding.
+ // Only one-shot recorded effects are decoded now.
+ initFixtureHumVoices();
+ setTimeout(()=>{if(!audio)return;decodeBuffer(FOOTSTEP_AUDIO).then(b=>{
+  footstepBuffer=b;console.info('Footstep recording ready:',footstepBuffer.duration.toFixed(2)+'s')
+ }).catch(e=>console.warn('Footstep decode failed:',e)).finally(()=>{
   try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){ }
- }).catch(()=>{})},40)
+ })},40)
 }
 function startAudio(){
  unlockProvidedMedia();
- if(audio){try{if(audio.state==='suspended')audio.resume()}catch(_){ }beginBodyFallDecode();return true}
+ if(audio){try{if(audio.state==='suspended')audio.resume()}catch(_){ }initFixtureHumVoices();beginBodyFallDecode();return true}
  try{
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
   audio=new AC();master=audio.createGain();master.gain.value=.96;master.connect(audio.destination);noiseBuffer=makeNoiseBuffer();
   // Tiny one-shot forces the context to become audible inside the NOCLIP gesture on iOS.
   const o=audio.createOscillator(),g=audio.createGain();g.gain.value=.00001;o.connect(g);g.connect(master);o.start();o.stop(audio.currentTime+.02);
-  const p=audio.resume();if(p&&p.catch)p.catch(()=>{});beginBodyFallDecode();return true
+  const p=audio.resume();if(p&&p.catch)p.catch(()=>{});initFixtureHumVoices();beginBodyFallDecode();return true
  }catch(e){console.warn('Web Audio unavailable, using HTML audio fallbacks:',e);audio=null;master=null;noiseBuffer=null;return false}
 }
 function softTone(freq,dur=.12,vol=.02,delay=0){if(!audio)return;const t=audio.currentTime+delay,o=audio.createOscillator(),g=audio.createGain(),lp=audio.createBiquadFilter();o.type='sine';o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*.72),t+dur);lp.type='lowpass';lp.frequency.value=800;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(lp);lp.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.03)}
@@ -2366,7 +2396,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.23';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.24';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2441,7 +2471,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.23'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.24'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
@@ -2659,12 +2689,12 @@ function loop(now){
 
 updateJournal();updateSurvivalHUD(player.health,player.stamina,player.staminaExhausted);resize();
 addEventListener('resize',()=>{syncAppHeight();resize()},{passive:true});addEventListener('orientationchange',()=>{syncAppHeight();setTimeout(()=>{syncAppHeight();resize()},250)},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(!fixtureHumVoices.length&&fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}});
 document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(started&&!journalOpen)e.preventDefault()},{passive:false});
 window.addEventListener('orientationchange',()=>{setTimeout(()=>{syncAppHeight();resize()},120)},{passive:true});
 if(window.visualViewport){visualViewport.addEventListener('resize',()=>{syncAppHeight();resize()},{passive:true});}
-window.addEventListener('pageshow',()=>{syncAppHeight();try{if(started&&audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(started&&!fixtureHumBuffer&&fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}},{passive:true});
+window.addEventListener('pageshow',()=>{syncAppHeight();try{if(started&&audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(started&&!fixtureHumVoices.length&&fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}},{passive:true});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();showHint('Graphics paused. Return to the page to restore the renderer.',2.5)});
 canvas.addEventListener('webglcontextrestored',()=>{syncAppHeight();resize()});
 requestAnimationFrame(loop);
