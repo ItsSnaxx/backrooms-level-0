@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.37 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.39 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -341,7 +341,7 @@ body.game-paused #grain{animation-play-state:paused}
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.38 · FOCUS ZOOM + BETTER NOTES</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -1693,7 +1693,16 @@ function setPaused(next,skipLock=false){
 }
 function pauseBack(){if(awaitingBind){awaitingBind=null;pauseMessage.textContent='Keybinding change cancelled.';refreshBindLabels();return}if(pausePage==='bindings'){setPausePage('settings');setSettingsTab('controls')}else if(pausePage!=='main')setPausePage('main');else setPaused(false)}
 function pauseToMainMenu(){setPaused(false,true);intro.active=false;try{introStaticVideo.pause();introStaticAudio.pause()}catch(_){}setIntroOverlay(0,false);if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';if(ui.escapeScreen)ui.escapeScreen.style.display='none';resetLevel0State();started=false;window.__lbStarted=false;ui.start.style.display='flex';document.getElementById('controls').style.opacity='0';document.getElementById('hud').style.opacity='0';setIntroHumMuted(true);applyAudioSettings()}
-function pauseRestart(){setPaused(false,true);resetLevel0State();started=false;window.__lbStarted=false;setIntroHumMuted(false);beginGame()}
+function pauseRestart(){
+ setPaused(false,true);clearPauseInputs();setFocusHeld(false);
+ intro.active=false;exitSequence.active=false;
+ try{introStaticVideo.pause();introStaticAudio.pause()}catch(_){}
+ setIntroOverlay(0,false);
+ if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';
+ started=false;window.__lbStarted=false;startLocked=false;
+ resetLevel0State();
+ beginGame();
+}
 function pauseAction(action){if(action==='resume')setPaused(false);else if(action==='mainmenu')pauseToMainMenu();else if(action==='restart'||action==='level0')pauseRestart();else if(action==='settings'||action==='levels'||action==='bindings'){setPausePage(action);if(action==='settings')setSettingsTab(settingsTab)}}
 pauseEl.addEventListener('click',e=>{const b=e.target.closest('[data-pause-action]');if(b)pauseAction(b.dataset.pauseAction)});
 pauseToggle.addEventListener('click',()=>setPaused(!paused));
@@ -2315,8 +2324,8 @@ function addNoteModel(n,out){
     top.push(rowT);bottom.push(rowB);
   }
   for(let iz=0;iz<segZ;iz++)for(let ix=0;ix<segX;ix++){
-    quadAuto(top[iz][ix],top[iz][ix+1],top[iz+1][ix+1],top[iz+1][ix],34,out);
-    quadAuto(bottom[iz+1][ix],bottom[iz+1][ix+1],bottom[iz][ix+1],bottom[iz][ix],34,out);
+    quadAuto(top[iz+1][ix],top[iz+1][ix+1],top[iz][ix+1],top[iz][ix],34,out);
+    quadAuto(bottom[iz][ix],bottom[iz][ix+1],bottom[iz+1][ix+1],bottom[iz+1][ix],34,out);
   }
   for(let ix=0;ix<segX;ix++){
     quadAuto(top[0][ix],top[0][ix+1],bottom[0][ix+1],bottom[0][ix],34,out);
@@ -3419,15 +3428,15 @@ function playJumpLiftOff(){
   if(!started||intro.active||player.falling)return;
   footstep(false,.74,false,player.crouch);
   noiseBurst(.078,.0105,160,1150,0);
-  softTone(116+Math.random()*14,.034,.058,'triangle',0,.004,effectsBus||master);
+  softTone(116+Math.random()*14,.070,.018,0);
 }
 function playLandingThud(drop=0,impact=0){
   if(!started||intro.active||player.falling)return;
   const heavy=Math.max(.45,Math.min(1.8,.62+drop*.62+impact*.05));
   footstep(false,Math.min(1.95,.92+heavy*.42),impact>.8,false);
   noiseBurst(.12+.05*Math.min(1,drop*.45),.014+.010*heavy,54,920,0);
-  softTone(Math.max(52,92-heavy*17),.044+.014*heavy,.105+.03*Math.min(1,drop),'sine',0,.0035,effectsBus||master);
-  if(drop>.85||impact>5.1)playBodyFallLayer();
+  softTone(Math.max(52,92-heavy*17),.095+.035*Math.min(1,drop),.018+.008*heavy,0);
+  if(drop>1.55||impact>6.4)playBodyFallLayer();
 }
 function whisper(){if(!audio)return;const t=audio.currentTime;for(let i=0;i<4;i++){const src=audio.createBufferSource(),bp=audio.createBiquadFilter(),g=audio.createGain();src.buffer=noiseBuffer;bp.type='bandpass';bp.frequency.value=[430,690,1030,1550][i];bp.Q.value=2.6;g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime([.0038,.0045,.0032,.0018][i],t+.35);g.gain.exponentialRampToValueAtTime(.0001,t+2.0+Math.random()*.9);src.connect(bp);bp.connect(g);g.connect(effectsBus||master);src.start(t);src.stop(t+3.0)}}
 function distantThump(){noiseBurst(.24,.014,28,210,0);softTone(39,.18,.008,.01)}
@@ -3601,7 +3610,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.37 · PAUSE + CUSTOM SETTINGS';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -3691,7 +3700,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92*settings.cinematics/100*settings.master/100;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.37 · PAUSE + CUSTOM SETTINGS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
@@ -3738,7 +3747,7 @@ function updateJumpPhysics(dt){
  jump.buffer=Math.max(0,jump.buffer-dt);
  if(canStart&&jump.buffer>0){
   jump.grounded=false;jump.velocity=JUMP_SPEED;jump.holdTime=0;jump.buffer=0;jump.apex=jump.footY;jump.airTime=0;jump.lastImpactSpeed=0;
-  playJumpLiftOff();
+  try{playJumpLiftOff()}catch(error){console.warn('Jump sound unavailable:',error)}
  }
  if(jump.grounded){
   const footSupport=jumpSupportHeightAt(player.x,player.z,jump.footY-.24,jump.footY+.075);
@@ -3764,14 +3773,16 @@ function updateJumpPhysics(dt){
    if(next<=landing+.002&&previous>=landing-.05){
     const impact=Math.abs(jump.velocity),drop=Math.max(0,jump.apex-landing);
     next=landing;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=landing>.09;jump.lastImpactSpeed=impact;
-    playLandingThud(drop,impact);
+    try{playLandingThud(drop,impact)}catch(error){console.warn('Landing sound unavailable:',error)}
     jump.apex=landing;jump.airTime=0;
    }
   }
-  if(next<=0){
+  if(next<=0&&!jump.grounded){
+   // The support-surface branch above may have already landed on floor y=0;
+   // never play two landing thuds for one jump.
    const impact=Math.abs(jump.velocity),drop=Math.max(0,jump.apex);
    next=0;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=false;jump.lastImpactSpeed=impact;
-   playLandingThud(drop,impact);
+   try{playLandingThud(drop,impact)}catch(error){console.warn('Landing sound unavailable:',error)}
    jump.apex=0;jump.airTime=0;
   }
   jump.footY=next;
@@ -3896,7 +3907,7 @@ const dustSeedData=new Float32Array(DUST_COUNT*4);
 const dustVS=`precision mediump float;
 attribute vec4 aDust;
 uniform mat4 uDustVP;uniform vec3 uDustCam;uniform vec3 uDustForward;
-uniform float uDustTime;uniform vec4 uPitRects[6];
+uniform float uDustTime;
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
 varying float vDustFine;varying float vDustVisibility;
 void main(){
@@ -3927,7 +3938,7 @@ void main(){
 const dustFS=`precision mediump float;
 uniform vec3 uDustCam;uniform vec3 uDustForward;
 uniform float uDustFlash;uniform sampler2D uDustLightMap;
-uniform vec2 uDustMapMin;uniform vec2 uDustMapSize;
+uniform vec2 uDustMapMin;uniform vec2 uDustMapSize;uniform vec4 uPitRects[6];
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
 varying float vDustFine;varying float vDustVisibility;
 void main(){
@@ -4138,22 +4149,29 @@ function render(t){
  if(started&&!intro.active)renderDust(vp,[eyeX,eyeY,eyeZ],fwd,t*.001);
 }
 
+let lastLoopErrorTime=-10000;
 function loop(now){
- const raw=(now-last)/1000;last=now;const dt=Math.min(.05,raw);
- if(paused){requestAnimationFrame(loop);return}
- worldTime+=started?dt:0;if(started)updateNoclipIntro(dt);if(started)updateExitSequence(dt);if(started)updateFocus(dt);if(started&&!journalOpen)movement(dt);if(!exitSequence.active)director(dt);
- lightLevel=1;if(started)updateFixtureHum(false);
- if(hintTimer>0){hintTimer-=dt;if(hintTimer<=0)ui.hint.style.opacity='0'}
- // Frame cap only affects rendering; the simulation keeps real elapsed time.
- const interval=settings.fps>0?1000/settings.fps:0;
- if(!interval||now-lastPresented>=interval-1.5){
-  const since=now-lastPresented;lastPresented=now;render(now);
-  frameSamples.push(raw*1000);if(frameSamples.length>90)frameSamples.shift();
-  if(settings.showFPS&&now-lastFPSShown>850){lastFPSShown=now;document.getElementById('fpsMeter').textContent=Math.round(since>0?1000/since:60)+' FPS'}
+ try{
+  const raw=(now-last)/1000;last=now;const dt=Math.max(0,Math.min(.05,raw));
+  if(paused)return;
+  worldTime+=started?dt:0;if(started)updateNoclipIntro(dt);if(started)updateExitSequence(dt);if(started)updateFocus(dt);if(started&&!journalOpen)movement(dt);if(!exitSequence.active)director(dt);
+  lightLevel=1;if(started)updateFixtureHum(false);
+  if(hintTimer>0){hintTimer-=dt;if(hintTimer<=0)ui.hint.style.opacity='0'}
+  // Frame cap only affects rendering; the simulation keeps real elapsed time.
+  const interval=settings.fps>0?1000/settings.fps:0;
+  if(!interval||now-lastPresented>=interval-1.5){
+   const since=now-lastPresented;lastPresented=now;render(now);
+   frameSamples.push(raw*1000);if(frameSamples.length>90)frameSamples.shift();
+   if(settings.showFPS&&now-lastFPSShown>850){lastFPSShown=now;document.getElementById('fpsMeter').textContent=Math.round(since>0?1000/since:60)+' FPS'}
+  }
+  if(settings.adaptive&&now-lastScaleCheck>5000&&frameSamples.length>30){lastScaleCheck=now;const avg=frameSamples.reduce((a,b)=>a+b,0)/frameSamples.length;if(avg>25&&renderScale>.68)renderScale=Math.max(.68,renderScale-.08);else if(avg<17&&renderScale<1)renderScale=Math.min(1,renderScale+.05)}
+  if(!settings.adaptive&&renderScale!==1)renderScale=1;
+ }catch(error){
+  // Avoid a dead engine if one frame fails; rate-limit logging on persistent failures.
+  if(now-lastLoopErrorTime>1500){lastLoopErrorTime=now;console.error('Recovered from frame error:',error)}
+ }finally{
+  requestAnimationFrame(loop);
  }
- if(settings.adaptive&&now-lastScaleCheck>5000&&frameSamples.length>30){lastScaleCheck=now;const avg=frameSamples.reduce((a,b)=>a+b,0)/frameSamples.length;if(avg>25&&renderScale>.68)renderScale=Math.max(.68,renderScale-.08);else if(avg<17&&renderScale<1)renderScale=Math.min(1,renderScale+.05)}
- if(!settings.adaptive&&renderScale!==1)renderScale=1;
- requestAnimationFrame(loop);
 }
 
 updateJournal();updateSurvivalHUD(player.health,player.stamina,player.staminaExhausted);resize();
