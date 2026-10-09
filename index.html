@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.33 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.34 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -91,10 +91,12 @@
   #buttons{position:absolute;right:calc(env(safe-area-inset-right) + 18px);bottom:calc(env(safe-area-inset-bottom) + 18px);display:grid;grid-template-columns:repeat(2,58px);gap:10px;pointer-events:auto}
   .btn{width:58px;height:58px;border-radius:50%;border:1px solid rgba(242,239,211,.18);background:rgba(12,12,8,.32);color:rgba(245,241,211,.82);font:700 10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;backdrop-filter:blur(3px);touch-action:none}
   .btn:active,.btn.active{background:rgba(236,229,167,.18);border-color:rgba(245,238,181,.45)}
+  #jump{position:absolute;right:calc(env(safe-area-inset-right) + 24px);bottom:calc(env(safe-area-inset-bottom) + clamp(190px,27vh,220px));width:46px;height:46px;border-radius:50%;border:1px solid rgba(242,239,211,.24);background:rgba(12,12,8,.37);color:rgba(245,241,211,.84);font:700 9px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.075em;backdrop-filter:blur(3px);pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;box-shadow:0 4px 13px rgba(0,0,0,.15)}
+  #jump.pressed{background:rgba(239,230,175,.22);border-color:rgba(245,238,181,.57)}
   #journalBtn{position:absolute;right:calc(env(safe-area-inset-right) + 14px);top:calc(env(safe-area-inset-top) + 12px);width:46px;height:46px;border-radius:9px;border:1px solid rgba(242,239,211,.16);background:rgba(11,11,8,.27);color:rgba(244,240,211,.82);font-size:20px;pointer-events:auto;backdrop-filter:blur(3px)}
   #shiftLock{position:absolute;right:calc(env(safe-area-inset-right) + 70px);top:calc(env(safe-area-inset-top) + 12px);min-width:96px;height:46px;border-radius:9px;border:1px solid rgba(242,239,211,.16);background:rgba(11,11,8,.27);color:rgba(244,240,211,.82);font:700 9px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;pointer-events:auto;backdrop-filter:blur(3px)}#shiftLock.active{background:rgba(236,229,167,.18);border-color:rgba(245,238,181,.45)}@media (pointer:coarse){#shiftLock{display:none}}
-  html.desktop-only #stick,html.desktop-only #buttons{display:none}
-  html.touch-device #stick,html.touch-device #buttons{display:block}
+  html.desktop-only #stick,html.desktop-only #buttons,html.desktop-only #jump{display:none}
+  html.touch-device #stick,html.touch-device #buttons,html.touch-device #jump{display:block}
   html.touch-device #shiftLock{display:none}html.touch-device #survivalHud{bottom:calc(env(safe-area-inset-bottom) + 146px)}html.touch-device #controlsPrompt{bottom:calc(env(safe-area-inset-bottom) + 146px)}html.touch-device #controlsPanel{bottom:calc(env(safe-area-inset-bottom) + 190px)}
   #start,#journal{position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 45%,rgba(50,48,27,.22),rgba(5,5,4,.98) 66%);display:flex;align-items:center;justify-content:center;padding:28px;touch-action:manipulation}
   #startCard{max-width:650px;text-align:center}
@@ -184,6 +186,7 @@
     <button class="btn" id="light" type="button">LIGHT</button>
     <button class="btn" id="use" type="button">USE</button>
   </div>
+  <button id="jump" type="button" aria-label="Jump, hold to jump higher">JUMP</button>
   <button id="shiftLock" type="button" aria-label="Toggle desktop shift lock">SHIFT LOCK</button>
   <button id="journalBtn" type="button" aria-label="Open journal">⌁</button>
   <button id="controlsPrompt" type="button" aria-expanded="false" aria-controls="controlsPanel"><span class="promptLabel">CONTROLS</span><span class="promptKey">B</span></button>
@@ -193,6 +196,7 @@
     <div class="controlRow"><span class="controlKey">WASD</span><span class="controlDesc">Move</span></div>
     <div class="controlRow"><span class="controlKey">MOUSE</span><span class="controlDesc">Look around</span></div>
     <div class="controlRow"><span class="controlKey">SHIFT</span><span class="controlDesc">Sprint</span></div>
+    <div class="controlRow"><span class="controlKey">SPACE</span><span class="controlDesc">Jump · hold for extra height</span></div>
     <div class="controlRow"><span class="controlKey">C</span><span class="controlDesc">Crouch</span></div>
     <div class="controlRow"><span class="controlKey">F</span><span class="controlDesc">Flashlight</span></div>
     <div class="controlRow"><span class="controlKey">E</span><span class="controlDesc">Interact</span></div>
@@ -203,16 +207,17 @@
     <div class="controlRow"><span class="controlKey">STICK</span><span class="controlDesc">Move</span></div>
     <div class="controlRow"><span class="controlKey">DRAG</span><span class="controlDesc">Look around</span></div>
     <div class="controlRow"><span class="controlKey">RUN</span><span class="controlDesc">Toggle sprint</span></div>
+    <div class="controlRow"><span class="controlKey">JUMP</span><span class="controlDesc">Tap low · hold higher</span></div>
   </div>
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.33 · FURNITURE MATERIALS</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.34 · FURNITURE MATERIALS</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
     <div id="bootError" aria-live="polite" style="display:none;margin:12px auto 0;max-width:520px;color:#d6b0a0;font-size:11px;line-height:1.45"></div>
-    <small>Universal build · iPhone/iPad Safari + PC browsers · Portrait or landscape<br>Mobile: left thumb move, drag to look · RUN and CROUCH toggle while moving · PC: WASD + mouse · C crouch · E interact · Q journal · Shift sprint · click game for mouse lock · Shift+L toggles shift lock.</small>
+    <small>Universal build · iPhone/iPad Safari + PC browsers · Portrait or landscape<br>Mobile: left thumb move, drag to look · RUN and CROUCH toggle while moving · PC: WASD + mouse · C crouch · E interact · Q journal · Shift sprint · SPACE jump (hold higher) · click game for mouse lock · Shift+L toggles shift lock.</small>
   </div>
 </div>
 <div id="escapeScreen" role="dialog" aria-modal="true" aria-label="Level escaped">
@@ -1168,7 +1173,7 @@ function startCanvasFallback(){
   function playLevelTitle(){levelTag.classList.remove('cinematic');void levelTag.offsetWidth;levelTag.classList.add('cinematic');setTimeout(()=>levelTag.classList.remove('cinematic'),5000)}
   const stick=document.getElementById('stick'), knob=document.getElementById('knob');
   const sprintBtn=document.getElementById('sprint'), crouchBtn=document.getElementById('crouch');
-  const lightBtn=document.getElementById('light'), useBtn=document.getElementById('use');
+  const lightBtn=document.getElementById('light'), useBtn=document.getElementById('use'),jumpBtn=document.getElementById('jump');
   const journalBtn=document.getElementById('journalBtn'), journal=document.getElementById('journal'), closeJournal=document.getElementById('closeJournal');
   const entries=document.getElementById('journalEntries');
   const isTouch=(navigator.maxTouchPoints||0)>0 || 'ontouchstart' in window;
@@ -1218,6 +1223,17 @@ function startCanvasFallback(){
   const fbInitialSpawn=fbFindSafeSpawn(0,0);
   let px=fbInitialSpawn.x,pz=fbInitialSpawn.z,ang=.15,pitch=0,crouch=false,run=false,flashlight=false,fbFalling=false,fbFallTime=0,fbHealth=100,fbStamina=100,fbStaminaExhausted=false,fbStaminaDelay=0;
   let fbIntro=true,fbIntroT=0;
+  // Canvas fallback preserves the same variable-height jump input and arc.
+  let fbFootY=0,fbJumpVelocity=0,fbJumpHeld=false,fbHoldTime=0;
+  function fallbackJumpPress(down){
+    if(down){
+      if(fbIntro||fbFalling||journalOpen)return;
+      if(!fbJumpHeld&&fbFootY<.025){fbJumpVelocity=4.68;fbHoldTime=0;}
+      fbJumpHeld=true;
+    }else fbJumpHeld=false;
+    if(jumpBtn)jumpBtn.classList.toggle('pressed',fbJumpHeld);
+  }
+
   const keys={};let joyX=0,joyY=0,moveId=null,lookId=null,startX=0,startY=0,lastX=0,lastY=0;
   let bobPhase=0,bobAmt=0,stepTimer=0,lastT=performance.now(),journalOpen=false;
   function resize(){const dpr=Math.min(1.5,window.devicePixelRatio||1),w=Math.max(1,innerWidth),h=Math.max(1,innerHeight);c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);c.style.width=w+'px';c.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
@@ -1229,16 +1245,23 @@ function startCanvasFallback(){
   function collide(nx,nz){const r=.22;return isWallWorld(nx-r,nz-r)||isWallWorld(nx+r,nz-r)||isWallWorld(nx-r,nz+r)||isWallWorld(nx+r,nz+r)}
   function update(dt){
     if(journalOpen)return;
-    if(fbFalling){fbFallTime+=dt;bobAmt*=Math.max(0,1-dt*8);if(fbFallTime>.62){fbFalling=false;fbFallTime=0;fbThrowToComplex()}return}
+    if(fbFalling){fbJumpHeld=false;fbFootY=0;fbJumpVelocity=0;fbFallTime+=dt;bobAmt*=Math.max(0,1-dt*8);if(fbFallTime>.62){fbFalling=false;fbFallTime=0;fbThrowToComplex()}return}
+    if(fbFootY>0||fbJumpVelocity>0){
+      const grav=fbJumpHeld&&fbJumpVelocity>0&&fbHoldTime<.23?7.25:13.8;
+      fbHoldTime+=dt;fbJumpVelocity-=grav*dt;
+      fbFootY=Math.max(0,Math.min(2.82-(crouch?1.13:1.62)-.09,fbFootY+fbJumpVelocity*dt));
+      if(fbFootY<=0){fbJumpVelocity=0;fbFootY=0;}
+      else if(fbFootY>=2.82-(crouch?1.13:1.62)-.091)fbJumpVelocity=Math.min(0,fbJumpVelocity);
+    }
     let f=0,s=0;if(keys.w)f+=1;if(keys.s)f-=1;if(keys.a)s-=1;if(keys.d)s+=1;f+=-joyY;s+=joyX;let l=Math.hypot(f,s);if(l>1){f/=l;s/=l}const moving=l>.06;const wantsRun=!crouch&&(run||keys.shift);const running=wantsRun&&!fbStaminaExhausted&&fbStamina>0;const sp=crouch?1.42:(running?4.10:2.22);const ca=Math.cos(ang),sa=Math.sin(ang);const oldX=px,oldZ=pz;const dx=(ca*f-sa*s)*sp*dt,dz=(sa*f+ca*s)*sp*dt;let nx=px+dx,nz=pz;if(!collide(nx,nz))px=nx;nx=px;nz=pz+dz;if(!collide(nx,nz))pz=nz;const actuallyMoving=Math.hypot(px-oldX,pz-oldZ)>.0004;
     if(running&&actuallyMoving){fbStamina=Math.max(0,fbStamina-10.5*dt);fbStaminaDelay=1.2;if(fbStamina<=.01){fbStamina=0;fbStaminaExhausted=true;run=false;if(sprintBtn)sprintBtn.classList.remove('active')}}else{fbStaminaDelay=Math.max(0,fbStaminaDelay-dt);if(fbStaminaDelay<=0)fbStamina=Math.min(100,fbStamina+11*dt);if(fbStaminaExhausted&&fbStamina>=45)fbStaminaExhausted=false}updateSurvivalHUD(fbHealth,fbStamina,fbStaminaExhausted);
-    if(pitAt(px,pz)){fbFalling=true;fbFallTime=0;hintEl.textContent='The bridge vanishes beneath your foot.';setTimeout(()=>{if(hintEl.textContent.includes('bridge'))hintEl.textContent=''},1100);return}
+    if(fbFootY<.10&&pitAt(px,pz)){fbFalling=true;fbFallTime=0;hintEl.textContent='The bridge vanishes beneath your foot.';setTimeout(()=>{if(hintEl.textContent.includes('bridge'))hintEl.textContent=''},1100);return}
     const target=moving?(running?.055:(crouch?.012:.027)):0;bobAmt+=(target-bobAmt)*Math.min(1,dt*8);if(moving){bobPhase+=dt*(running?9.2:(crouch?4.1:6.15));stepTimer-=dt;if(stepTimer<=0){playStep(running);stepTimer=running?.32:(crouch?.82:.58)}}else stepTimer=0;
   }
   function render(){const w=innerWidth,h=innerHeight,hh=h*.48;ctx.fillStyle='#3b392a';ctx.fillRect(0,0,w,hh);ctx.fillStyle='#6f654d';ctx.fillRect(0,hh,w,h-hh);
     // Render the SAME pits as actual shafts in Canvas fallback: visible vertical
     // walls and a deep black bottom rather than flat black floor decals.
-    const fov=1.12,focal=(w*.5)/Math.tan(fov*.5),eye=crouch?1.12:1.62;
+    const fov=1.12,focal=(w*.5)/Math.tan(fov*.5),eye=(crouch?1.12:1.62)+fbFootY;
     function projPoint(x,y,z){const dx=x-px,dz=z-pz,dep=dx*Math.cos(ang)+dz*Math.sin(ang),lat=-dx*Math.sin(ang)+dz*Math.cos(ang);if(dep<=.16)return null;return{x:w*.5+(lat/dep)*focal,y:hh+((eye-y)/dep)*focal,d:dep}}
     const pits=visiblePits(px,pz).sort((a,b)=>{const acx=(a.x0+a.x1)*.5,acz=(a.z0+a.z1)*.5,bcx=(b.x0+b.x1)*.5,bcz=(b.z0+b.z1)*.5;return Math.hypot(bcx-px,bcz-pz)-Math.hypot(acx-px,acz-pz)});
     for(const p of pits){
@@ -1279,6 +1302,13 @@ function startCanvasFallback(){
   }
   function instant(el,fn){if(!el)return;let lt=0;const fire=e=>{e.preventDefault();e.stopPropagation();const n=performance.now();if(n-lt<220)return;lt=n;fn()};el.addEventListener('pointerdown',fire,{passive:false});el.addEventListener('touchstart',fire,{passive:false});}
   instant(sprintBtn,()=>{if(!run&&(fbStaminaExhausted||fbStamina<=0))return;run=!run;sprintBtn.classList.toggle('active',run)});
+  if(jumpBtn){
+    let jumpPid=null;
+    jumpBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(jumpPid!==null)return;jumpPid=e.pointerId;try{jumpBtn.setPointerCapture(e.pointerId)}catch(_){}fallbackJumpPress(true)},{passive:false});
+    const jumpRelease=e=>{if(jumpPid!==e.pointerId)return;e.preventDefault();e.stopPropagation();jumpPid=null;fallbackJumpPress(false)};
+    jumpBtn.addEventListener('pointerup',jumpRelease,{passive:false});jumpBtn.addEventListener('pointercancel',jumpRelease,{passive:false});
+    jumpBtn.addEventListener('lostpointercapture',()=>{jumpPid=null;fallbackJumpPress(false)});
+  }
   if(crouchBtn)crouchBtn.addEventListener('click',e=>{e.preventDefault();crouch=!crouch;crouchBtn.classList.toggle('active',crouch);status()});
   if(lightBtn)lightBtn.addEventListener('click',e=>{e.preventDefault();flashlight=!flashlight;playFlashSwitchClick(flashlight);lightBtn.classList.toggle('active',flashlight);status()});
   if(useBtn)useBtn.addEventListener('click',e=>{e.preventDefault();const d=nearestExitDoor(px,pz);if(d){hintEl.textContent='The heavy wooden door opens. You found a way further.';setTimeout(()=>hintEl.textContent='',2600)}else{hintEl.textContent='Nothing responds.';setTimeout(()=>hintEl.textContent='',1200)}});
@@ -1288,8 +1318,8 @@ function startCanvasFallback(){
   function pu(e){if(e.pointerId===moveId){moveId=null;joyX=joyY=0;stick.classList.remove('active');knob.style.transform=''}if(e.pointerId===lookId)lookId=null}
   c.addEventListener('pointerdown',pd,{passive:false});c.addEventListener('pointermove',pm,{passive:false});c.addEventListener('pointerup',pu,{passive:false});c.addEventListener('pointercancel',pu,{passive:false});
   c.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
-  addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='b'&&!e.repeat){e.preventDefault();setControlsMenu(!controlsMenuOpen);return}keys[k]=true;if(k==='c'&&!e.repeat){crouch=!crouch;status()}if(k==='q'&&!e.repeat)showJournal(!journalOpen);if(k==='f'&&!e.repeat){flashlight=!flashlight;playFlashSwitchClick(flashlight);status()}if(k==='e'&&!e.repeat){const d=nearestExitDoor(px,pz);hintEl.textContent=d?'The heavy wooden door opens. You found a way further.':'Nothing responds.';setTimeout(()=>hintEl.textContent='',d?2600:1000)}});
-  addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+  addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(e.code==='Space'||k===' '){e.preventDefault();if(!e.repeat)fallbackJumpPress(true);return}if(k==='b'&&!e.repeat){e.preventDefault();setControlsMenu(!controlsMenuOpen);return}keys[k]=true;if(k==='c'&&!e.repeat){crouch=!crouch;status()}if(k==='q'&&!e.repeat)showJournal(!journalOpen);if(k==='f'&&!e.repeat){flashlight=!flashlight;playFlashSwitchClick(flashlight);status()}if(k==='e'&&!e.repeat){const d=nearestExitDoor(px,pz);hintEl.textContent=d?'The heavy wooden door opens. You found a way further.':'Nothing responds.';setTimeout(()=>hintEl.textContent='',d?2600:1000)}});
+  addEventListener('keyup',e=>{if(e.code==='Space'||e.key===' '){e.preventDefault();fallbackJumpPress(false)}else keys[e.key.toLowerCase()]=false});
   c.addEventListener('click',()=>{if(!isTouch&&c.requestPointerLock)try{c.requestPointerLock()}catch(_){}});document.addEventListener('mousemove',e=>{if(document.pointerLockElement===c){ang+=e.movementX*.0027;pitch=Math.max(-.6,Math.min(.6,pitch+e.movementY*.0018))}});
   status();updateSurvivalHUD(fbHealth,fbStamina,fbStaminaExhausted);startEl.style.display='none';window.__lbStarted=true;document.getElementById('controls').style.opacity='0';document.getElementById('hud').style.opacity='0';setIntroOverlay(0,true);requestAnimationFrame(loop);return true;
 }
@@ -1301,7 +1331,7 @@ window.__lbEngineReady=true;
 const ui={
  start:document.getElementById('start'),enter:document.getElementById('enter'),
  stick:document.getElementById('stick'),knob:document.getElementById('knob'),
- sprint:document.getElementById('sprint'),crouch:document.getElementById('crouch'),light:document.getElementById('light'),use:document.getElementById('use'),
+ sprint:document.getElementById('sprint'),crouch:document.getElementById('crouch'),light:document.getElementById('light'),use:document.getElementById('use'),jump:document.getElementById('jump'),
  status:document.getElementById('status'),hint:document.getElementById('hint'),levelTag:document.getElementById('levelTag'),
  shiftLock:document.getElementById('shiftLock'),journalBtn:document.getElementById('journalBtn'),journal:document.getElementById('journal'),
  entries:document.getElementById('journalEntries'),closeJournal:document.getElementById('closeJournal'),
@@ -1940,7 +1970,7 @@ const FURNITURE_MESHES={
   sofa:new Float32Array([-0.382891,0.729977,0.392228,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.345308,0.526062,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.392228,-0.9834,-0.1813,0.0,20.0,-0.345308,0.526062,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.345308,0.526062,0.392228,-0.9834,-0.1813,0.0,20.0,-0.188984,0.506351,-0.388916,0.1813,-0.9834,-0.0,20.0,-0.188984,0.506351,0.392228,0.1813,-0.9834,-0.0,20.0,-0.324891,0.481303,0.392228,0.1813,-0.9834,-0.0,20.0,-0.188984,0.506351,-0.388916,0.1813,-0.9834,-0.0,20.0,-0.324891,0.481303,0.392228,0.1813,-0.9834,-0.0,20.0,-0.324891,0.481303,-0.388916,0.1813,-0.9834,-0.0,20.0,-0.230695,0.798674,0.392228,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.388916,0.9834,0.1813,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,0.392228,0.9834,0.1813,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9834,0.1813,-0.0,20.0,-0.285761,1.097444,0.392228,0.9834,0.1813,-0.0,20.0,-0.442084,1.117156,0.392228,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,0.392228,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,0.570144,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,0.392228,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,0.570144,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,0.570144,-0.998,0.0634,0.0,20.0,-0.235218,0.757195,-0.456551,-0.0,0.0,-1.0,20.0,-0.197633,0.55328,-0.456551,-0.0,0.0,-1.0,20.0,-0.33354,0.528231,-0.456551,-0.0,0.0,-1.0,20.0,-0.235218,0.757195,-0.456551,-0.0,0.0,-1.0,20.0,-0.33354,0.528231,-0.456551,-0.0,0.0,-1.0,20.0,-0.371123,0.732146,-0.456551,-0.0,0.0,-1.0,20.0,-0.371123,0.732146,0.459863,0.1813,-0.9834,-0.0,20.0,-0.235218,0.757195,0.459863,0.1813,-0.9834,-0.0,20.0,-0.235218,0.757195,0.66859,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,0.459863,0.1813,-0.9834,-0.0,20.0,-0.235218,0.757195,0.66859,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,0.66859,0.1813,-0.9834,-0.0,20.0,-0.306178,1.142205,-0.388916,0.9098,0.415,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9098,0.415,-0.0,20.0,-0.285761,1.097445,-0.566832,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,-0.388916,0.9098,0.415,-0.0,20.0,-0.285761,1.097445,-0.566832,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,-0.566832,0.9098,0.415,-0.0,20.0,-0.235218,0.757195,-0.456551,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,-0.456551,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,-0.665277,0.1813,-0.9834,-0.0,20.0,-0.235218,0.757195,-0.456551,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,-0.665277,0.1813,-0.9834,-0.0,20.0,-0.235218,0.757195,-0.665277,0.1813,-0.9834,-0.0,20.0,-0.445202,1.068058,-0.388916,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,-0.388916,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,-0.566832,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,-0.388916,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,-0.566832,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,-0.566832,-0.998,0.0634,0.0,20.0,-0.33354,0.528231,0.459863,-0.8967,-0.409,0.1691,20.0,-0.345308,0.526062,0.392228,-0.8967,-0.409,0.1691,20.0,-0.324891,0.481303,0.392228,-0.8967,-0.409,0.1691,20.0,-0.185867,0.555449,0.392228,0.9836,-0.0625,0.1691,20.0,-0.197633,0.55328,0.459863,0.9836,-0.0625,0.1691,20.0,-0.188984,0.506351,0.392228,0.9836,-0.0625,0.1691,20.0,-0.324891,0.481303,-0.388916,-0.8967,-0.409,-0.1691,20.0,-0.345308,0.526062,-0.388916,-0.8967,-0.409,-0.1691,20.0,-0.33354,0.528231,-0.456551,-0.8967,-0.409,-0.1691,20.0,-0.185867,0.555449,-0.388916,0.9836,-0.0625,-0.1691,20.0,-0.188984,0.506351,-0.388916,0.9836,-0.0625,-0.1691,20.0,-0.197633,0.55328,-0.456551,0.9836,-0.0625,-0.1691,20.0,-0.230695,0.798674,-0.388916,0.9941,-0.1084,-0.0,20.0,-0.235218,0.757195,-0.456551,0.9941,-0.1084,-0.0,20.0,-0.235218,0.757195,-0.665277,0.9941,-0.1084,-0.0,20.0,-0.230695,0.798674,-0.388916,0.9941,-0.1084,-0.0,20.0,-0.235218,0.757195,-0.665277,0.9941,-0.1084,-0.0,20.0,-0.230695,0.798674,-0.566832,0.9941,-0.1084,-0.0,20.0,-0.285761,1.097444,0.392228,0.9098,0.415,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,-0.388916,0.9098,0.415,-0.0,20.0,-0.285761,1.097444,0.392228,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,-0.388916,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,0.392228,0.9098,0.415,-0.0,20.0,-0.230695,0.798674,0.392228,0.9834,0.1813,-0.0,20.0,-0.285761,1.097444,0.392228,0.9834,0.1813,-0.0,20.0,-0.285761,1.097444,0.570144,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,0.392228,0.9834,0.1813,-0.0,20.0,-0.285761,1.097444,0.570144,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,0.570144,0.9834,0.1813,-0.0,20.0,-0.445202,1.068058,-0.388916,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,0.392228,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,0.392228,-0.998,0.0634,0.0,20.0,-0.445202,1.068058,-0.388916,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,0.392228,-0.998,0.0634,0.0,20.0,-0.442084,1.117156,-0.388916,-0.998,0.0634,0.0,20.0,-0.230695,0.798674,-0.388916,0.9684,0.1785,-0.1742,20.0,-0.185867,0.555449,-0.388916,0.9684,0.1785,-0.1742,20.0,-0.197633,0.55328,-0.456551,0.9684,0.1785,-0.1742,20.0,-0.230695,0.798674,-0.388916,0.9684,0.1785,-0.1742,20.0,-0.197633,0.55328,-0.456551,0.9684,0.1785,-0.1742,20.0,-0.235218,0.757195,-0.456551,0.9684,0.1785,-0.1742,20.0,-0.188984,0.506351,-0.388916,0.1481,-0.8036,-0.5765,20.0,-0.324891,0.481303,-0.388916,0.1481,-0.8036,-0.5765,20.0,-0.33354,0.528231,-0.456551,0.1481,-0.8036,-0.5765,20.0,-0.188984,0.506351,-0.388916,0.1481,-0.8036,-0.5765,20.0,-0.33354,0.528231,-0.456551,0.1481,-0.8036,-0.5765,20.0,-0.197633,0.55328,-0.456551,0.1481,-0.8036,-0.5765,20.0,-0.442084,1.117156,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,-0.566832,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,-0.566832,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,-0.566832,-0.1813,0.9834,-0.0,20.0,-0.185867,0.555449,-0.388916,0.998,-0.0634,-0.0,20.0,-0.185867,0.555449,0.392228,0.998,-0.0634,-0.0,20.0,-0.188984,0.506351,0.392228,0.998,-0.0634,-0.0,20.0,-0.185867,0.555449,-0.388916,0.998,-0.0634,-0.0,20.0,-0.188984,0.506351,0.392228,0.998,-0.0634,-0.0,20.0,-0.188984,0.506351,-0.388916,0.998,-0.0634,-0.0,20.0,-0.197633,0.55328,0.459863,0.1481,-0.8036,0.5765,20.0,-0.33354,0.528231,0.459863,0.1481,-0.8036,0.5765,20.0,-0.324891,0.481303,0.392228,0.1481,-0.8036,0.5765,20.0,-0.197633,0.55328,0.459863,0.1481,-0.8036,0.5765,20.0,-0.324891,0.481303,0.392228,0.1481,-0.8036,0.5765,20.0,-0.188984,0.506351,0.392228,0.1481,-0.8036,0.5765,20.0,-0.345308,0.526062,0.392228,-0.9098,-0.415,0.0,20.0,-0.345308,0.526062,-0.388916,-0.9098,-0.415,0.0,20.0,-0.324891,0.481303,-0.388916,-0.9098,-0.415,0.0,20.0,-0.345308,0.526062,0.392228,-0.9098,-0.415,0.0,20.0,-0.324891,0.481303,-0.388916,-0.9098,-0.415,0.0,20.0,-0.324891,0.481303,0.392228,-0.9098,-0.415,0.0,20.0,-0.382891,0.729977,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,-0.566832,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,-0.566832,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,-0.566832,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.392228,-0.9684,-0.1785,0.1742,20.0,-0.345308,0.526062,0.392228,-0.9684,-0.1785,0.1742,20.0,-0.33354,0.528231,0.459863,-0.9684,-0.1785,0.1742,20.0,-0.382891,0.729977,0.392228,-0.9684,-0.1785,0.1742,20.0,-0.33354,0.528231,0.459863,-0.9684,-0.1785,0.1742,20.0,-0.371123,0.732146,0.459863,-0.9684,-0.1785,0.1742,20.0,-0.306178,1.142205,0.392228,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,0.392228,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,-0.388916,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,0.392228,-0.1813,0.9834,-0.0,20.0,-0.371123,0.732146,-0.456551,0.1813,-0.9834,-0.0,20.0,-0.382891,0.729977,-0.388916,0.1813,-0.9834,-0.0,20.0,-0.382891,0.729977,-0.566832,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,-0.456551,0.1813,-0.9834,-0.0,20.0,-0.382891,0.729977,-0.566832,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,-0.665277,0.1813,-0.9834,-0.0,20.0,-0.185867,0.555449,0.392228,0.9684,0.1785,0.1742,20.0,-0.230695,0.798674,0.392228,0.9684,0.1785,0.1742,20.0,-0.235218,0.757195,0.459863,0.9684,0.1785,0.1742,20.0,-0.185867,0.555449,0.392228,0.9684,0.1785,0.1742,20.0,-0.235218,0.757195,0.459863,0.9684,0.1785,0.1742,20.0,-0.197633,0.55328,0.459863,0.9684,0.1785,0.1742,20.0,-0.345308,0.526062,-0.388916,-0.9684,-0.1785,-0.1742,20.0,-0.382891,0.729977,-0.388916,-0.9684,-0.1785,-0.1742,20.0,-0.371123,0.732146,-0.456551,-0.9684,-0.1785,-0.1742,20.0,-0.345308,0.526062,-0.388916,-0.9684,-0.1785,-0.1742,20.0,-0.371123,0.732146,-0.456551,-0.9684,-0.1785,-0.1742,20.0,-0.33354,0.528231,-0.456551,-0.9684,-0.1785,-0.1742,20.0,-0.235218,0.757195,0.459863,0.9941,-0.1084,-0.0,20.0,-0.230695,0.798674,0.392228,0.9941,-0.1084,-0.0,20.0,-0.230695,0.798674,0.570144,0.9941,-0.1084,-0.0,20.0,-0.235218,0.757195,0.459863,0.9941,-0.1084,-0.0,20.0,-0.230695,0.798674,0.570144,0.9941,-0.1084,-0.0,20.0,-0.235218,0.757195,0.66859,0.9941,-0.1084,-0.0,20.0,-0.285761,1.097444,0.392228,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,0.392228,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,0.570144,0.9098,0.415,-0.0,20.0,-0.285761,1.097444,0.392228,0.9098,0.415,-0.0,20.0,-0.306178,1.142205,0.570144,0.9098,0.415,-0.0,20.0,-0.285761,1.097444,0.570144,0.9098,0.415,-0.0,20.0,-0.197633,0.55328,0.459863,-0.0,0.0,1.0,20.0,-0.235218,0.757195,0.459863,-0.0,0.0,1.0,20.0,-0.371123,0.732146,0.459863,-0.0,0.0,1.0,20.0,-0.197633,0.55328,0.459863,-0.0,0.0,1.0,20.0,-0.371123,0.732146,0.459863,-0.0,0.0,1.0,20.0,-0.33354,0.528231,0.459863,-0.0,0.0,1.0,20.0,-0.185867,0.555449,0.392228,0.9834,0.1813,-0.0,20.0,-0.185867,0.555449,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.388916,0.9834,0.1813,-0.0,20.0,-0.185867,0.555449,0.392228,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,0.392228,0.9834,0.1813,-0.0,20.0,-0.445202,1.068058,0.392228,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,0.392228,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,-0.388916,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.392228,-0.9834,-0.1813,0.0,20.0,-0.235218,0.757195,0.66859,-0.0,0.0,1.0,20.0,-0.297529,1.095276,0.66859,-0.0,0.0,1.0,20.0,-0.433436,1.070227,0.66859,-0.0,0.0,1.0,20.0,-0.235218,0.757195,0.66859,-0.0,0.0,1.0,20.0,-0.433436,1.070227,0.66859,-0.0,0.0,1.0,20.0,-0.371123,0.732146,0.66859,-0.0,0.0,1.0,20.0,-0.433436,1.070227,0.66859,-0.9911,0.0629,0.1171,20.0,-0.442084,1.117156,0.570144,-0.9911,0.0629,0.1171,20.0,-0.445202,1.068058,0.570144,-0.9911,0.0629,0.1171,20.0,-0.297529,1.095276,0.66859,0.9036,0.4122,0.1171,20.0,-0.285761,1.097444,0.570144,0.9036,0.4122,0.1171,20.0,-0.306178,1.142205,0.570144,0.9036,0.4122,0.1171,20.0,-0.433436,1.070227,-0.665277,-0.9911,0.0629,-0.1171,20.0,-0.445202,1.068058,-0.566832,-0.9911,0.0629,-0.1171,20.0,-0.442084,1.117156,-0.566832,-0.9911,0.0629,-0.1171,20.0,-0.285761,1.097445,-0.566832,0.9036,0.4122,-0.1171,20.0,-0.297529,1.095276,-0.665277,0.9036,0.4122,-0.1171,20.0,-0.306178,1.142205,-0.566832,0.9036,0.4122,-0.1171,20.0,-0.433436,1.070227,0.66859,-0.1631,0.885,0.4362,20.0,-0.297529,1.095276,0.66859,-0.1631,0.885,0.4362,20.0,-0.306178,1.142205,0.570144,-0.1631,0.885,0.4362,20.0,-0.433436,1.070227,0.66859,-0.1631,0.885,0.4362,20.0,-0.306178,1.142205,0.570144,-0.1631,0.885,0.4362,20.0,-0.442084,1.117156,0.570144,-0.1631,0.885,0.4362,20.0,-0.297529,1.095276,-0.665277,-0.1631,0.885,-0.4362,20.0,-0.433436,1.070227,-0.665277,-0.1631,0.885,-0.4362,20.0,-0.442084,1.117156,-0.566832,-0.1631,0.885,-0.4362,20.0,-0.297529,1.095276,-0.665277,-0.1631,0.885,-0.4362,20.0,-0.442084,1.117156,-0.566832,-0.1631,0.885,-0.4362,20.0,-0.306178,1.142205,-0.566832,-0.1631,0.885,-0.4362,20.0,-0.382891,0.729977,-0.566832,-0.9763,-0.1799,-0.1207,20.0,-0.445202,1.068058,-0.566832,-0.9763,-0.1799,-0.1207,20.0,-0.433436,1.070227,-0.665277,-0.9763,-0.1799,-0.1207,20.0,-0.382891,0.729977,-0.566832,-0.9763,-0.1799,-0.1207,20.0,-0.433436,1.070227,-0.665277,-0.9763,-0.1799,-0.1207,20.0,-0.371123,0.732146,-0.665277,-0.9763,-0.1799,-0.1207,20.0,-0.230695,0.798674,0.570144,0.9763,0.1799,0.1207,20.0,-0.285761,1.097444,0.570144,0.9763,0.1799,0.1207,20.0,-0.297529,1.095276,0.66859,0.9763,0.1799,0.1207,20.0,-0.230695,0.798674,0.570144,0.9763,0.1799,0.1207,20.0,-0.297529,1.095276,0.66859,0.9763,0.1799,0.1207,20.0,-0.235218,0.757195,0.66859,0.9763,0.1799,0.1207,20.0,-0.445202,1.068058,0.570144,-0.9763,-0.1799,0.1207,20.0,-0.382891,0.729977,0.570144,-0.9763,-0.1799,0.1207,20.0,-0.371123,0.732146,0.66859,-0.9763,-0.1799,0.1207,20.0,-0.445202,1.068058,0.570144,-0.9763,-0.1799,0.1207,20.0,-0.371123,0.732146,0.66859,-0.9763,-0.1799,0.1207,20.0,-0.433436,1.070227,0.66859,-0.9763,-0.1799,0.1207,20.0,-0.285761,1.097445,-0.566832,0.9763,0.1799,-0.1207,20.0,-0.230695,0.798674,-0.566832,0.9763,0.1799,-0.1207,20.0,-0.235218,0.757195,-0.665277,0.9763,0.1799,-0.1207,20.0,-0.285761,1.097445,-0.566832,0.9763,0.1799,-0.1207,20.0,-0.235218,0.757195,-0.665277,0.9763,0.1799,-0.1207,20.0,-0.297529,1.095276,-0.665277,0.9763,0.1799,-0.1207,20.0,-0.297529,1.095276,-0.665277,-0.0,0.0,-1.0,20.0,-0.235218,0.757195,-0.665277,-0.0,0.0,-1.0,20.0,-0.371123,0.732146,-0.665277,-0.0,0.0,-1.0,20.0,-0.297529,1.095276,-0.665277,-0.0,0.0,-1.0,20.0,-0.371123,0.732146,-0.665277,-0.0,0.0,-1.0,20.0,-0.433436,1.070227,-0.665277,-0.0,0.0,-1.0,20.0,-0.445202,1.068058,0.392228,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.392228,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.570144,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,0.392228,-0.9834,-0.1813,0.0,20.0,-0.382891,0.729977,0.570144,-0.9834,-0.1813,0.0,20.0,-0.445202,1.068058,0.570144,-0.9834,-0.1813,0.0,20.0,-0.306178,1.142205,0.392228,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,0.392228,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,0.570144,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,0.392228,-0.1813,0.9834,-0.0,20.0,-0.442084,1.117156,0.570144,-0.1813,0.9834,-0.0,20.0,-0.306178,1.142205,0.570144,-0.1813,0.9834,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.566832,0.9834,0.1813,-0.0,20.0,-0.285761,1.097445,-0.388916,0.9834,0.1813,-0.0,20.0,-0.230695,0.798674,-0.566832,0.9834,0.1813,-0.0,20.0,-0.285761,1.097445,-0.566832,0.9834,0.1813,-0.0,20.0,-0.382891,0.729977,0.392228,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,0.459863,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,0.66859,0.1813,-0.9834,-0.0,20.0,-0.382891,0.729977,0.392228,0.1813,-0.9834,-0.0,20.0,-0.371123,0.732146,0.66859,0.1813,-0.9834,-0.0,20.0,-0.382891,0.729977,0.570144,0.1813,-0.9834,-0.0,20.0,-0.282481,0.315253,0.406684,0.0,-1.0,0.0,20.0,-0.282481,0.315253,-0.403372,0.0,-1.0,0.0,20.0,0.528179,0.315253,-0.403372,0.0,-1.0,0.0,20.0,-0.282481,0.315253,0.406684,0.0,-1.0,0.0,20.0,0.528179,0.315253,-0.403372,0.0,-1.0,0.0,20.0,0.528179,0.315253,0.406684,0.0,-1.0,0.0,20.0,0.59837,0.497357,-0.403372,1.0,0.0,0.0,20.0,0.59837,0.497357,0.406684,1.0,0.0,0.0,20.0,0.59837,0.329764,0.406684,1.0,0.0,0.0,20.0,0.59837,0.497357,-0.403372,1.0,0.0,0.0,20.0,0.59837,0.329764,0.406684,1.0,0.0,0.0,20.0,0.59837,0.329764,-0.403372,1.0,0.0,0.0,20.0,0.528179,0.511868,0.406684,-0.0,1.0,-0.0,20.0,0.528179,0.511868,-0.403372,-0.0,1.0,-0.0,20.0,-0.282481,0.511868,-0.403372,-0.0,1.0,-0.0,20.0,0.528179,0.511868,0.406684,-0.0,1.0,-0.0,20.0,-0.282481,0.511868,-0.403372,-0.0,1.0,-0.0,20.0,-0.282481,0.511868,0.406684,-0.0,1.0,-0.0,20.0,0.528179,0.497357,0.476822,-0.0,0.0,1.0,20.0,-0.282481,0.497357,0.476822,-0.0,0.0,1.0,20.0,-0.282481,0.329764,0.476822,-0.0,0.0,1.0,20.0,0.528179,0.497357,0.476822,-0.0,0.0,1.0,20.0,-0.282481,0.329764,0.476822,-0.0,0.0,1.0,20.0,0.528179,0.329764,0.476822,-0.0,0.0,1.0,20.0,-0.282481,0.497357,-0.473509,-0.0,0.0,-1.0,20.0,0.528179,0.497357,-0.473509,-0.0,0.0,-1.0,20.0,0.528179,0.329764,-0.473509,-0.0,0.0,-1.0,20.0,-0.282481,0.497357,-0.473509,-0.0,0.0,-1.0,20.0,0.528179,0.329764,-0.473509,-0.0,0.0,-1.0,20.0,-0.282481,0.329764,-0.473509,-0.0,0.0,-1.0,20.0,-0.282481,0.329764,0.476822,-0.1984,-0.9598,0.1986,20.0,-0.352671,0.329764,0.406684,-0.1984,-0.9598,0.1986,20.0,-0.282481,0.315253,0.406684,-0.1984,-0.9598,0.1986,20.0,-0.282481,0.497357,0.476822,-0.1984,0.9598,0.1986,20.0,-0.282481,0.511868,0.406684,-0.1984,0.9598,0.1986,20.0,-0.352671,0.497357,0.406684,-0.1984,0.9598,0.1986,20.0,-0.282481,0.329764,-0.473509,-0.1984,-0.9598,-0.1986,20.0,-0.282481,0.315253,-0.403372,-0.1984,-0.9598,-0.1986,20.0,-0.352671,0.329764,-0.403372,-0.1984,-0.9598,-0.1986,20.0,-0.282481,0.511868,-0.403372,-0.1984,0.9598,-0.1986,20.0,-0.282481,0.497357,-0.473509,-0.1984,0.9598,-0.1986,20.0,-0.352671,0.497357,-0.403372,-0.1984,0.9598,-0.1986,20.0,0.528179,0.329764,0.476822,0.1984,-0.9598,0.1986,20.0,0.528179,0.315253,0.406684,0.1984,-0.9598,0.1986,20.0,0.59837,0.329764,0.406684,0.1984,-0.9598,0.1986,20.0,0.528179,0.511868,0.406684,0.1984,0.9598,0.1986,20.0,0.528179,0.497357,0.476822,0.1984,0.9598,0.1986,20.0,0.59837,0.497357,0.406684,0.1984,0.9598,0.1986,20.0,0.59837,0.329764,-0.403372,0.1984,-0.9598,-0.1986,20.0,0.528179,0.315253,-0.403372,0.1984,-0.9598,-0.1986,20.0,0.528179,0.329764,-0.473509,0.1984,-0.9598,-0.1986,20.0,0.528179,0.511868,-0.403372,0.1984,0.9598,-0.1986,20.0,0.59837,0.497357,-0.403372,0.1984,0.9598,-0.1986,20.0,0.528179,0.497357,-0.473509,0.1984,0.9598,-0.1986,20.0,-0.282481,0.329764,0.476822,-0.7068,-0.0,0.7074,20.0,-0.282481,0.497357,0.476822,-0.7068,-0.0,0.7074,20.0,-0.352671,0.497357,0.406684,-0.7068,-0.0,0.7074,20.0,-0.282481,0.329764,0.476822,-0.7068,-0.0,0.7074,20.0,-0.352671,0.497357,0.406684,-0.7068,-0.0,0.7074,20.0,-0.352671,0.329764,0.406684,-0.7068,-0.0,0.7074,20.0,-0.282481,0.511868,0.406684,-0.2025,0.9793,0.0,20.0,-0.282481,0.511868,-0.403372,-0.2025,0.9793,0.0,20.0,-0.352671,0.497357,-0.403372,-0.2025,0.9793,0.0,20.0,-0.282481,0.511868,0.406684,-0.2025,0.9793,0.0,20.0,-0.352671,0.497357,-0.403372,-0.2025,0.9793,0.0,20.0,-0.352671,0.497357,0.406684,-0.2025,0.9793,0.0,20.0,-0.282481,0.497357,-0.473509,-0.7068,0.0,-0.7074,20.0,-0.282481,0.329764,-0.473509,-0.7068,0.0,-0.7074,20.0,-0.352671,0.329764,-0.403372,-0.7068,0.0,-0.7074,20.0,-0.282481,0.497357,-0.473509,-0.7068,0.0,-0.7074,20.0,-0.352671,0.329764,-0.403372,-0.7068,0.0,-0.7074,20.0,-0.352671,0.497357,-0.403372,-0.7068,0.0,-0.7074,20.0,-0.282481,0.315253,-0.403372,-0.2025,-0.9793,0.0,20.0,-0.282481,0.315253,0.406684,-0.2025,-0.9793,0.0,20.0,-0.352671,0.329764,0.406684,-0.2025,-0.9793,0.0,20.0,-0.282481,0.315253,-0.403372,-0.2025,-0.9793,0.0,20.0,-0.352671,0.329764,0.406684,-0.2025,-0.9793,0.0,20.0,-0.352671,0.329764,-0.403372,-0.2025,-0.9793,0.0,20.0,-0.282481,0.511868,-0.403372,-0.0,0.9793,-0.2026,20.0,0.528179,0.511868,-0.403372,-0.0,0.9793,-0.2026,20.0,0.528179,0.497357,-0.473509,-0.0,0.9793,-0.2026,20.0,-0.282481,0.511868,-0.403372,-0.0,0.9793,-0.2026,20.0,0.528179,0.497357,-0.473509,-0.0,0.9793,-0.2026,20.0,-0.282481,0.497357,-0.473509,-0.0,0.9793,-0.2026,20.0,0.59837,0.497357,-0.403372,0.7068,0.0,-0.7074,20.0,0.59837,0.329764,-0.403372,0.7068,0.0,-0.7074,20.0,0.528179,0.329764,-0.473509,0.7068,0.0,-0.7074,20.0,0.59837,0.497357,-0.403372,0.7068,0.0,-0.7074,20.0,0.528179,0.329764,-0.473509,0.7068,0.0,-0.7074,20.0,0.528179,0.497357,-0.473509,0.7068,0.0,-0.7074,20.0,0.528179,0.315253,-0.403372,0.0,-0.9793,-0.2026,20.0,-0.282481,0.315253,-0.403372,0.0,-0.9793,-0.2026,20.0,-0.282481,0.329764,-0.473509,0.0,-0.9793,-0.2026,20.0,0.528179,0.315253,-0.403372,0.0,-0.9793,-0.2026,20.0,-0.282481,0.329764,-0.473509,0.0,-0.9793,-0.2026,20.0,0.528179,0.329764,-0.473509,0.0,-0.9793,-0.2026,20.0,0.528179,0.511868,-0.403372,0.2025,0.9793,0.0,20.0,0.528179,0.511868,0.406684,0.2025,0.9793,0.0,20.0,0.59837,0.497357,0.406684,0.2025,0.9793,0.0,20.0,0.528179,0.511868,-0.403372,0.2025,0.9793,0.0,20.0,0.59837,0.497357,0.406684,0.2025,0.9793,0.0,20.0,0.59837,0.497357,-0.403372,0.2025,0.9793,0.0,20.0,0.528179,0.497357,0.476822,0.7068,-0.0,0.7074,20.0,0.528179,0.329764,0.476822,0.7068,-0.0,0.7074,20.0,0.59837,0.329764,0.406684,0.7068,-0.0,0.7074,20.0,0.528179,0.497357,0.476822,0.7068,-0.0,0.7074,20.0,0.59837,0.329764,0.406684,0.7068,-0.0,0.7074,20.0,0.59837,0.497357,0.406684,0.7068,-0.0,0.7074,20.0,0.528179,0.315253,0.406684,0.2025,-0.9793,0.0,20.0,0.528179,0.315253,-0.403372,0.2025,-0.9793,0.0,20.0,0.59837,0.329764,-0.403372,0.2025,-0.9793,0.0,20.0,0.528179,0.315253,0.406684,0.2025,-0.9793,0.0,20.0,0.59837,0.329764,-0.403372,0.2025,-0.9793,0.0,20.0,0.59837,0.329764,0.406684,0.2025,-0.9793,0.0,20.0,0.528179,0.511868,0.406684,-0.0,0.9793,0.2026,20.0,-0.282481,0.511868,0.406684,-0.0,0.9793,0.2026,20.0,-0.282481,0.497357,0.476822,-0.0,0.9793,0.2026,20.0,0.528179,0.511868,0.406684,-0.0,0.9793,0.2026,20.0,-0.282481,0.497357,0.476822,-0.0,0.9793,0.2026,20.0,0.528179,0.497357,0.476822,-0.0,0.9793,0.2026,20.0,-0.282481,0.315253,0.406684,0.0,-0.9793,0.2026,20.0,0.528179,0.315253,0.406684,0.0,-0.9793,0.2026,20.0,0.528179,0.329764,0.476822,0.0,-0.9793,0.2026,20.0,-0.282481,0.315253,0.406684,0.0,-0.9793,0.2026,20.0,0.528179,0.329764,0.476822,0.0,-0.9793,0.2026,20.0,-0.282481,0.329764,0.476822,0.0,-0.9793,0.2026,20.0,-0.352671,0.497357,0.406684,-1.0,-0.0,0.0,20.0,-0.352671,0.497357,-0.403372,-1.0,-0.0,0.0,20.0,-0.352671,0.329764,-0.403372,-1.0,-0.0,0.0,20.0,-0.352671,0.497357,0.406684,-1.0,-0.0,0.0,20.0,-0.352671,0.329764,-0.403372,-1.0,-0.0,0.0,20.0,-0.352671,0.329764,0.406684,-1.0,-0.0,0.0,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,0.593985,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,0.670573,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,0.670573,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.342539,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.361107,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.599314,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.599232,0.0,0.760196,0.0,0.0523,0.9986,20.0,-0.361107,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.599232,0.0,0.760196,0.0,0.0523,0.9986,20.0,-0.342539,0.0,0.760196,0.0,0.0523,0.9986,20.0,-0.342539,0.0,0.760196,0.0,-1.0,0.0,20.0,-0.342539,0.0,-0.760196,0.0,-1.0,0.0,20.0,0.670573,0.0,-0.760196,0.0,-1.0,0.0,20.0,-0.342539,0.0,0.760196,0.0,-1.0,0.0,20.0,0.670573,0.0,-0.760196,0.0,-1.0,0.0,20.0,0.670573,0.0,0.760196,0.0,-1.0,0.0,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.599314,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.599314,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.599314,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,-0.361107,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,0.593985,0.32204,0.743324,1.0,0.0,0.0,20.0,0.593985,0.32204,0.506706,1.0,0.0,0.0,20.0,0.593985,0.579142,0.506706,1.0,0.0,0.0,20.0,0.593985,0.32204,0.743324,1.0,0.0,0.0,20.0,0.593985,0.579142,0.506706,1.0,0.0,0.0,20.0,0.593985,0.579142,0.743324,1.0,0.0,0.0,20.0,0.593985,0.32204,-0.743324,0.9729,0.2314,0.0,20.0,0.593985,0.32204,-0.506706,0.9729,0.2314,0.0,20.0,0.593985,0.32204,0.506706,0.9729,0.2314,0.0,20.0,0.593985,0.32204,-0.743324,0.9729,0.2314,0.0,20.0,0.593985,0.32204,0.506706,0.9729,0.2314,0.0,20.0,0.593985,0.32204,0.743324,0.9729,0.2314,0.0,20.0,0.593985,0.32204,-0.743324,0.9729,0.2314,0.0,20.0,0.593985,0.32204,0.743324,0.9729,0.2314,0.0,20.0,0.670573,0.0,0.760196,0.9729,0.2314,0.0,20.0,0.593985,0.32204,-0.743324,0.9729,0.2314,0.0,20.0,0.670573,0.0,0.760196,0.9729,0.2314,0.0,20.0,0.670573,0.0,-0.760196,0.9729,0.2314,0.0,20.0,-0.361107,0.671312,0.743324,0.0006,1.0,0.0023,20.0,0.501815,0.671312,0.743324,0.0006,1.0,0.0023,20.0,0.501815,0.671312,0.506706,0.0006,1.0,0.0023,20.0,-0.361107,0.671312,0.743324,0.0006,1.0,0.0023,20.0,0.501815,0.671312,0.506706,0.0006,1.0,0.0023,20.0,-0.361107,0.672452,0.484206,0.0006,1.0,0.0023,20.0,-0.599232,0.0,0.760196,0.0,-1.0,0.0,20.0,-0.599232,0.0,-0.760196,0.0,-1.0,0.0,20.0,-0.342539,0.0,-0.760196,0.0,-1.0,0.0,20.0,-0.599232,0.0,0.760196,0.0,-1.0,0.0,20.0,-0.342539,0.0,-0.760196,0.0,-1.0,0.0,20.0,-0.342539,0.0,0.760196,0.0,-1.0,0.0,20.0,0.593985,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.361107,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.342539,0.0,0.760196,0.0,0.0523,0.9986,20.0,0.593985,0.32204,0.743324,0.0,0.0523,0.9986,20.0,-0.342539,0.0,0.760196,0.0,0.0523,0.9986,20.0,0.670573,0.0,0.760196,0.0,0.0523,0.9986,20.0,-0.599314,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,-0.342539,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.599314,0.32204,-0.743324,-0.0,0.0523,-0.9986,20.0,-0.342539,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.599232,0.0,-0.760196,-0.0,0.0523,-0.9986,20.0,-0.361107,0.671312,-0.743324,-0.0,1.0,-0.0045,20.0,-0.599314,0.671312,-0.743324,-0.0,1.0,-0.0045,20.0,-0.599314,0.672452,-0.487634,-0.0,1.0,-0.0045,20.0,-0.361107,0.671312,-0.743324,-0.0,1.0,-0.0045,20.0,-0.599314,0.672452,-0.487634,-0.0,1.0,-0.0045,20.0,-0.361107,0.672452,-0.487634,-0.0,1.0,-0.0045,20.0,0.593985,0.32204,-0.506706,1.0,0.0,0.0,20.0,0.593985,0.32204,-0.743324,1.0,0.0,0.0,20.0,0.593985,0.579142,-0.743324,1.0,0.0,0.0,20.0,0.593985,0.32204,-0.506706,1.0,0.0,0.0,20.0,0.593985,0.579142,-0.743324,1.0,0.0,0.0,20.0,0.593985,0.579142,-0.506706,1.0,0.0,0.0,20.0,-0.361107,0.32204,0.743324,-0.0,0.0,1.0,20.0,0.593985,0.32204,0.743324,-0.0,0.0,1.0,20.0,0.593985,0.579142,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.32204,0.743324,-0.0,0.0,1.0,20.0,0.593985,0.579142,0.743324,-0.0,0.0,1.0,20.0,0.501815,0.671312,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.32204,0.743324,-0.0,0.0,1.0,20.0,0.501815,0.671312,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.671312,0.743324,-0.0,0.0,1.0,20.0,-0.599314,0.671312,0.743324,-0.0,1.0,0.0044,20.0,-0.361107,0.671312,0.743324,-0.0,1.0,0.0044,20.0,-0.361107,0.672452,0.484206,-0.0,1.0,0.0044,20.0,-0.599314,0.671312,0.743324,-0.0,1.0,0.0044,20.0,-0.361107,0.672452,0.484206,-0.0,1.0,0.0044,20.0,-0.599314,0.672452,0.484206,-0.0,1.0,0.0044,20.0,-0.361107,0.32204,-0.487634,0.0202,0.0027,0.9998,20.0,0.593985,0.32204,-0.506706,0.0202,0.0027,0.9998,20.0,0.593985,0.579142,-0.506706,0.0202,0.0027,0.9998,20.0,-0.361107,0.32204,-0.487634,0.0202,0.0027,0.9998,20.0,0.593985,0.579142,-0.506706,0.0202,0.0027,0.9998,20.0,0.501815,0.671312,-0.506706,0.0202,0.0027,0.9998,20.0,-0.361107,0.32204,-0.487634,0.0202,0.0027,0.9998,20.0,0.501815,0.671312,-0.506706,0.0202,0.0027,0.9998,20.0,-0.361107,0.672452,-0.487634,0.0202,0.0027,0.9998,20.0,-0.599314,0.32204,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,0.743324,-1.0,-0.0,0.0,20.0,-0.599314,0.671312,0.743324,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.671312,0.743324,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,-0.743324,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,-0.743324,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.671312,-0.743324,-1.0,-0.0,0.0,20.0,0.593985,0.32204,0.506706,0.0239,0.0031,-0.9997,20.0,-0.361107,0.32204,0.484206,0.0239,0.0031,-0.9997,20.0,-0.361107,0.672452,0.484206,0.0239,0.0031,-0.9997,20.0,0.593985,0.32204,0.506706,0.0239,0.0031,-0.9997,20.0,-0.361107,0.672452,0.484206,0.0239,0.0031,-0.9997,20.0,0.501815,0.671312,0.506706,0.0239,0.0031,-0.9997,20.0,0.593985,0.32204,0.506706,0.0239,0.0031,-0.9997,20.0,0.501815,0.671312,0.506706,0.0239,0.0031,-0.9997,20.0,0.593985,0.579142,0.506706,0.0239,0.0031,-0.9997,20.0,-0.361107,0.32204,0.484206,1.0,0.0,0.0,20.0,-0.361107,0.32204,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.672452,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.32204,0.484206,1.0,0.0,0.0,20.0,-0.361107,0.672452,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.672452,0.484206,1.0,0.0,0.0,20.0,-0.599314,0.32204,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.32204,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.671312,0.743324,-0.0,0.0,1.0,20.0,-0.599314,0.32204,0.743324,-0.0,0.0,1.0,20.0,-0.361107,0.671312,0.743324,-0.0,0.0,1.0,20.0,-0.599314,0.671312,0.743324,-0.0,0.0,1.0,20.0,0.593985,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.361107,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.361107,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,0.593985,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,-0.361107,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,0.501815,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,0.593985,0.32204,-0.743324,-0.0,0.0,-1.0,20.0,0.501815,0.671312,-0.743324,-0.0,0.0,-1.0,20.0,0.593985,0.579142,-0.743324,-0.0,0.0,-1.0,20.0,0.593985,0.579142,-0.506706,0.7071,0.7071,0.0,20.0,0.593985,0.579142,-0.743324,0.7071,0.7071,0.0,20.0,0.501815,0.671312,-0.743324,0.7071,0.7071,0.0,20.0,0.593985,0.579142,-0.506706,0.7071,0.7071,0.0,20.0,0.501815,0.671312,-0.743324,0.7071,0.7071,0.0,20.0,0.501815,0.671312,-0.506706,0.7071,0.7071,0.0,20.0,0.501815,0.671312,0.506706,0.7071,0.7071,0.0,20.0,0.501815,0.671312,0.743324,0.7071,0.7071,0.0,20.0,0.593985,0.579142,0.743324,0.7071,0.7071,0.0,20.0,0.501815,0.671312,0.506706,0.7071,0.7071,0.0,20.0,0.593985,0.579142,0.743324,0.7071,0.7071,0.0,20.0,0.593985,0.579142,0.506706,0.7071,0.7071,0.0,20.0,0.501815,0.671312,-0.743324,0.0006,1.0,-0.0023,20.0,-0.361107,0.671312,-0.743324,0.0006,1.0,-0.0023,20.0,-0.361107,0.672452,-0.487634,0.0006,1.0,-0.0023,20.0,0.501815,0.671312,-0.743324,0.0006,1.0,-0.0023,20.0,-0.361107,0.672452,-0.487634,0.0006,1.0,-0.0023,20.0,0.501815,0.671312,-0.506706,0.0006,1.0,-0.0023,20.0,-0.361107,0.738429,0.484206,0.9703,0.242,0.0,20.0,-0.421748,0.981575,0.484206,0.9703,0.242,0.0,20.0,-0.421748,0.981575,0.676061,0.9703,0.242,0.0,20.0,-0.361107,0.738429,0.484206,0.9703,0.242,0.0,20.0,-0.421748,0.981575,0.676061,0.9703,0.242,0.0,20.0,-0.361107,0.738429,0.676061,0.9703,0.242,0.0,20.0,-0.599314,0.672452,0.484206,-0.0,0.0,1.0,20.0,-0.361107,0.672452,0.484206,-0.0,0.0,1.0,20.0,-0.361107,0.738429,0.484206,-0.0,0.0,1.0,20.0,-0.599314,0.672452,0.484206,-0.0,0.0,1.0,20.0,-0.361107,0.738429,0.484206,-0.0,0.0,1.0,20.0,-0.599314,0.738429,0.484206,-0.0,0.0,1.0,20.0,-0.361107,0.672452,-0.487634,-0.0,0.0,-1.0,20.0,-0.599314,0.672452,-0.487634,-0.0,0.0,-1.0,20.0,-0.599314,0.738429,-0.487634,-0.0,0.0,-1.0,20.0,-0.361107,0.672452,-0.487634,-0.0,0.0,-1.0,20.0,-0.599314,0.738429,-0.487634,-0.0,0.0,-1.0,20.0,-0.361107,0.738429,-0.487634,-0.0,0.0,-1.0,20.0,-0.361107,0.738429,0.484206,0.9703,0.242,0.0,20.0,-0.361107,0.738429,-0.487634,0.9703,0.242,0.0,20.0,-0.421748,0.981575,-0.487634,0.9703,0.242,0.0,20.0,-0.361107,0.738429,0.484206,0.9703,0.242,0.0,20.0,-0.421748,0.981575,-0.487634,0.9703,0.242,0.0,20.0,-0.421748,0.981575,0.484206,0.9703,0.242,0.0,20.0,-0.421748,0.981575,-0.487634,0.9703,0.242,0.0,20.0,-0.361107,0.738429,-0.487634,0.9703,0.242,0.0,20.0,-0.361107,0.738429,-0.67949,0.9703,0.242,0.0,20.0,-0.421748,0.981575,-0.487634,0.9703,0.242,0.0,20.0,-0.361107,0.738429,-0.67949,0.9703,0.242,0.0,20.0,-0.421748,0.981575,-0.67949,0.9703,0.242,0.0,20.0,-0.599314,0.738429,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,0.676061,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,0.484206,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,0.676061,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,0.676061,-0.9712,-0.2384,-0.0,20.0,-0.361107,0.738429,-0.67949,-0.0,0.0,-1.0,20.0,-0.599314,0.738429,-0.67949,-0.0,0.0,-1.0,20.0,-0.670573,1.028728,-0.67949,-0.0,0.0,-1.0,20.0,-0.361107,0.738429,-0.67949,-0.0,0.0,-1.0,20.0,-0.670573,1.028728,-0.67949,-0.0,0.0,-1.0,20.0,-0.520282,1.052852,-0.67949,-0.0,0.0,-1.0,20.0,-0.361107,0.738429,-0.67949,-0.0,0.0,-1.0,20.0,-0.520282,1.052852,-0.67949,-0.0,0.0,-1.0,20.0,-0.421748,0.981575,-0.67949,-0.0,0.0,-1.0,20.0,-0.361107,0.738429,-0.487634,0.0,-1.0,0.0,20.0,-0.599314,0.738429,-0.487634,0.0,-1.0,0.0,20.0,-0.599314,0.738429,-0.67949,0.0,-1.0,0.0,20.0,-0.361107,0.738429,-0.487634,0.0,-1.0,0.0,20.0,-0.599314,0.738429,-0.67949,0.0,-1.0,0.0,20.0,-0.361107,0.738429,-0.67949,0.0,-1.0,0.0,20.0,-0.599314,0.738429,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,-0.67949,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,-0.487634,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,-0.67949,-0.9712,-0.2384,-0.0,20.0,-0.599314,0.738429,-0.67949,-0.9712,-0.2384,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,-0.67949,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,-0.67949,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,-0.67949,-0.1585,0.9874,-0.0,20.0,-0.599314,0.738429,0.676061,-0.0,0.0,1.0,20.0,-0.361107,0.738429,0.676061,-0.0,0.0,1.0,20.0,-0.421748,0.981575,0.676061,-0.0,0.0,1.0,20.0,-0.599314,0.738429,0.676061,-0.0,0.0,1.0,20.0,-0.421748,0.981575,0.676061,-0.0,0.0,1.0,20.0,-0.520282,1.052852,0.676061,-0.0,0.0,1.0,20.0,-0.599314,0.738429,0.676061,-0.0,0.0,1.0,20.0,-0.520282,1.052852,0.676061,-0.0,0.0,1.0,20.0,-0.670573,1.028728,0.676061,-0.0,0.0,1.0,20.0,-0.599314,0.738429,0.484206,0.0,-1.0,0.0,20.0,-0.361107,0.738429,0.484206,0.0,-1.0,0.0,20.0,-0.361107,0.738429,0.676061,0.0,-1.0,0.0,20.0,-0.599314,0.738429,0.484206,0.0,-1.0,0.0,20.0,-0.361107,0.738429,0.676061,0.0,-1.0,0.0,20.0,-0.599314,0.738429,0.676061,0.0,-1.0,0.0,20.0,-0.520282,1.052852,0.484206,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,0.484206,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,-0.487634,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,0.484206,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,-0.487634,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,0.484206,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,0.484206,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,-0.487634,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,0.484206,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,-0.487634,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,0.484206,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,0.676061,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,0.676061,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,0.484206,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,0.676061,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,0.484206,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,-0.67949,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,-0.487634,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,-0.487634,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,-0.67949,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,-0.487634,0.5861,0.8102,0.0,20.0,-0.421748,0.981575,-0.67949,0.5861,0.8102,0.0,20.0,-0.520282,1.052852,0.484206,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,0.484206,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,0.676061,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,0.484206,-0.1585,0.9874,-0.0,20.0,-0.670573,1.028728,0.676061,-0.1585,0.9874,-0.0,20.0,-0.520282,1.052852,0.676061,-0.1585,0.9874,-0.0,20.0,-0.361107,0.672452,0.484206,1.0,0.0,0.0,20.0,-0.361107,0.672452,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.738429,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.672452,0.484206,1.0,0.0,0.0,20.0,-0.361107,0.738429,-0.487634,1.0,0.0,0.0,20.0,-0.361107,0.738429,0.484206,1.0,0.0,0.0,20.0,0.593985,0.32204,0.506706,-0.0,1.0,-0.0,20.0,0.593985,0.32204,-0.506706,-0.0,1.0,-0.0,20.0,-0.361107,0.32204,-0.487634,-0.0,1.0,-0.0,20.0,0.593985,0.32204,0.506706,-0.0,1.0,-0.0,20.0,-0.361107,0.32204,-0.487634,-0.0,1.0,-0.0,20.0,-0.361107,0.32204,0.484206,-0.0,1.0,-0.0,20.0,-0.599314,0.32204,0.743324,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,0.484206,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,-0.487634,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,0.743324,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,-0.487634,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,-0.743324,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,0.743324,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,-0.743324,-1.0,-0.0003,0.0,20.0,-0.599232,0.0,-0.760196,-1.0,-0.0003,0.0,20.0,-0.599314,0.32204,0.743324,-1.0,-0.0003,0.0,20.0,-0.599232,0.0,-0.760196,-1.0,-0.0003,0.0,20.0,-0.599232,0.0,0.760196,-1.0,-0.0003,0.0,20.0,-0.599314,0.672452,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.738429,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.738429,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.738429,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.32204,-0.487634,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,0.484206,-1.0,-0.0,0.0,20.0,-0.599314,0.672452,-0.487634,-1.0,-0.0,0.0,20.0])
 };
 
-// Build 0.9.33: furniture colliders share EXACTLY the same transformed mesh
+// Build 0.9.34: furniture colliders share EXACTLY the same transformed mesh
 // triangles as the visible imported models. Colliders are rebuilt whenever the
 // streamed world geometry is rebuilt, using a small spatial broadphase grid.
 const furnitureColliders=[];
@@ -2000,9 +2030,8 @@ function circleHitsFurnitureMesh(x,z,r,minY,maxY){
   }
   return false;
 }
-// Upward-facing surface query for a future jumping/step-up system. Unlike a
-// collider proxy, this returns real top surfaces of the imported chair/table/
-// sofa triangles at the queried X/Z position. Jumping remains disabled for now.
+// Upward-facing surface query for jumping and standing on actual furniture.
+// Triangles, not invisible approximation boxes, provide the physical height.
 function furnitureSupportHeightAt(x,z,minHeight,maxHeight){
   const cx=Math.floor(x/FURNITURE_GRID_SIZE),cz=Math.floor(z/FURNITURE_GRID_SIZE);
   const ids=furnitureCollisionGrid.get(furnitureCellKey(cx,cz))||[];
@@ -2032,6 +2061,17 @@ function furnitureSupportHeightAt(x,z,minHeight,maxHeight){
   return highest===-Infinity?null:highest;
 }
 
+// Conservative foot contact sample: mesh triangles under the body center and
+// a short ring provide stable landing at cushion and tabletop edges.
+function jumpSupportHeightAt(x,z,minHeight,maxHeight){
+ const possible=[[0,0],[.12,0],[-.12,0],[0,.12],[0,-.12]];
+ let result=0;
+ for(const [dx,dz] of possible){
+  const h=furnitureSupportHeightAt(x+dx,z+dz,Math.max(.04,minHeight),maxHeight);
+  if(h!==null&&h>result)result=h;
+ }
+ return result;
+}
 // Stable, per-prop material palettes. Reuse existing detailed wood, gray weave
 // and burlap images; tint via shader without creating new downloaded assets.
 function furnitureStyleNoise(x,z,salt){
@@ -2097,7 +2137,7 @@ function placeFloorFurniture(type,x,z,wallSide,angleJitter,out){
   const mesh=type==='table'?(Math.abs(Math.sin(x*1.9+z*.7))>.38?FURNITURE_MESHES.tableAlt:FURNITURE_MESHES.table):FURNITURE_MESHES[type];
   emitFurnitureMesh(mesh,x,0,z,yaw,0,0,out);
 }
-// Build 0.9.33: lower-density furniture; embedded chairs remain
+// Build 0.9.34: lower-density furniture; embedded chairs remain
 // more common than any floor furniture type. The real furniture meshes remain.
 const FURNITURE_PREVIEW_DENSE=false;
 function placeClippedChair(refType,wallX,wallZ,wallSide,out){
@@ -2484,6 +2524,18 @@ function movePlayerToSafeSpawn(preferredX,preferredZ){
 
 const __initialSafeSpawn=findSafeSpawnPosition(SPAWN_X,SPAWN_Z);
 const player={x:__initialSafeSpawn.x,z:__initialSafeSpawn.z,y:1.62,yaw:0,pitch:-.035,crouch:false,sprint:false,flash:false,steps:0,bobPhase:0,bobAmt:0,swayAmt:0,pitCooldown:0,falling:false,fallTime:0,health:100,stamina:100,staminaExhausted:false,staminaRegenDelay:0};
+const jump={footY:0,velocity:0,grounded:true,held:false,buffer:0,holdTime:0,eyeHeight:1.62,landedOnFurniture:false};
+const JUMP_SPEED=4.68,JUMP_GRAVITY=13.8,JUMP_HOLD_GRAVITY=7.25,JUMP_HOLD_WINDOW=.23;
+function resetJumpState(){jump.footY=0;jump.velocity=0;jump.grounded=true;jump.held=false;jump.buffer=0;jump.holdTime=0;jump.eyeHeight=1.62;jump.landedOnFurniture=false;ui.jump&&ui.jump.classList.remove('pressed');}
+function setJumpPressed(pressed){
+ if(pressed){
+  if(!started||intro.active||exitSequence.active||journalOpen||player.falling)return;
+  if(!jump.held){jump.buffer=.14;jump.holdTime=0;}
+  jump.held=true;
+ }else{jump.held=false;ui.jump&&ui.jump.classList.remove('pressed');}
+ if(ui.jump)ui.jump.classList.toggle('pressed',jump.held);
+}
+
 let joyX=0,joyY=0,keys={},started=false,journalOpen=false,last=performance.now(),worldTime=0,lightLevel=1,hintTimer=0,nearMarker=null,nearExitDoor=null;
 const notesText=[
  'The buzzing gets louder when I try to retrace my steps. I do not think it is electrical.',
@@ -2542,15 +2594,17 @@ function circleAABB(cx,cz,r,x0,z0,x1,z1){
   const qx=Math.max(x0,Math.min(cx,x1)),qz=Math.max(z0,Math.min(cz,z1));
   const dx=cx-qx,dz=cz-qz;return dx*dx+dz*dz<r*r;
 }
-function collides(x,z){
+function collides(x,z,footY=jump.footY){
+  const bodyHeight=Math.max(.52,Math.min((player.crouch?1.13:1.77),H-footY-.035));
   for(const w of wallRects){
+    if(footY+bodyHeight<=(w.y0||0)+.015||footY>=(w.y1||H)-.015)continue;
     if(w.crawl&&player.crouch)continue;
     if(x<w.x0-RADIUS||x>w.x1+RADIUS||z<w.z0-RADIUS||z>w.z1+RADIUS)continue;
     if(circleAABB(x,z,RADIUS,w.x0,w.z0,w.x1,w.z1))return true;
   }
   // Every visible triangle of the imported furniture is solid at the
   // player's standing/crouching height. Respect the player's circle radius.
-  return circleHitsFurnitureMesh(x,z,RADIUS,.055,player.crouch?1.13:1.77);
+  return circleHitsFurnitureMesh(x,z,RADIUS,footY+.06,footY+bodyHeight);
 }
 
 function mat4Perspective(out,fovy,aspect,near,far){const f=1/Math.tan(fovy/2),nf=1/(near-far);out[0]=f/aspect;out[1]=0;out[2]=0;out[3]=0;out[4]=0;out[5]=f;out[6]=0;out[7]=0;out[8]=0;out[9]=0;out[10]=(far+near)*nf;out[11]=-1;out[12]=0;out[13]=0;out[14]=2*far*near*nf;out[15]=0;return out}
@@ -2866,8 +2920,22 @@ syncShiftLock();
 if(ui.shiftLock)ui.shiftLock.addEventListener('click',()=>{shiftLockEnabled=!shiftLockEnabled;syncShiftLock();if(shiftLockEnabled)requestLock();else if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()});
 canvas.addEventListener('click',()=>requestLock());
 document.addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas&&started){player.yaw-=e.movementX*.0025;player.pitch=Math.max(-1.16,Math.min(1.16,player.pitch-e.movementY*.0022))}});
-addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='b'&&!e.repeat){e.preventDefault();setControlsMenu(!controlsMenuOpen);return}keys[k]=true;if(k==='f'&&!e.repeat)toggleFlash();if(k==='c'&&!e.repeat)toggleCrouch();if(k==='e'&&!e.repeat)interact();if(k==='q'&&!e.repeat){e.preventDefault();toggleJournal()}if(k==='l'&&e.shiftKey&&!e.repeat){e.preventDefault();shiftLockEnabled=!shiftLockEnabled;syncShiftLock();if(shiftLockEnabled)requestLock();else if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}});
-addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(e.code==='Space'||k===' '){if(started&&!intro.active&&!journalOpen){e.preventDefault();if(!e.repeat)setJumpPressed(true)}return}if(k==='b'&&!e.repeat){e.preventDefault();setControlsMenu(!controlsMenuOpen);return}keys[k]=true;if(k==='f'&&!e.repeat)toggleFlash();if(k==='c'&&!e.repeat)toggleCrouch();if(k==='e'&&!e.repeat)interact();if(k==='q'&&!e.repeat){e.preventDefault();toggleJournal()}if(k==='l'&&e.shiftKey&&!e.repeat){e.preventDefault();shiftLockEnabled=!shiftLockEnabled;syncShiftLock();if(shiftLockEnabled)requestLock();else if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}});
+addEventListener('keyup',e=>{if(e.code==='Space'||e.key===' '){if(started)e.preventDefault();setJumpPressed(false);return}keys[e.key.toLowerCase()]=false});
+if(ui.jump){
+ let activeJumpPointer=null,lastTouch=0;
+ if(window.PointerEvent){
+  ui.jump.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(activeJumpPointer!==null)return;activeJumpPointer=e.pointerId;try{ui.jump.setPointerCapture(e.pointerId)}catch(_){}setJumpPressed(true)},{passive:false});
+  const release=e=>{if(e.pointerId!==activeJumpPointer)return;e.preventDefault();e.stopPropagation();activeJumpPointer=null;setJumpPressed(false)};
+  ui.jump.addEventListener('pointerup',release,{passive:false});ui.jump.addEventListener('pointercancel',release,{passive:false});ui.jump.addEventListener('lostpointercapture',()=>{activeJumpPointer=null;setJumpPressed(false)});
+ }else{
+  ui.jump.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();lastTouch=performance.now();setJumpPressed(true)},{passive:false});
+  const release=e=>{e.preventDefault();e.stopPropagation();setJumpPressed(false)};
+  ui.jump.addEventListener('touchend',release,{passive:false});ui.jump.addEventListener('touchcancel',release,{passive:false});
+  ui.jump.addEventListener('mousedown',e=>{if(performance.now()-lastTouch>500){e.preventDefault();setJumpPressed(true)}});
+  addEventListener('mouseup',()=>setJumpPressed(false));
+ }
+}
 
 // Mobile action controls are toggles and fire on touch/pointer DOWN so they work
 // while another finger is already holding the movement stick or dragging the camera.
@@ -2893,7 +2961,7 @@ function startExitSequence(door){
   if(exitSequence.active||!door)return;
   const f=doorOutward(door);
   exitSequence.active=true;exitSequence.t=0;exitSequence.door=door;exitSequence.startX=player.x;exitSequence.startZ=player.z;exitSequence.startYaw=player.yaw;exitSequence.startPitch=player.pitch;exitSequence.open=0;exitSequence.stepMask=0;
-  player.sprint=false;player.crouch=false;ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');nearExitDoor=null;ui.use.classList.remove('active');
+  resetJumpState();player.sprint=false;player.crouch=false;ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');nearExitDoor=null;ui.use.classList.remove('active');
   if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock();
   document.getElementById('controls').style.opacity='0';document.getElementById('hud').style.opacity='0';
   ui.hint.style.opacity='0';hintTimer=0;ui.exitFade.style.opacity='0';
@@ -2910,7 +2978,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.33 · FURNITURE MATERIALS';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.34 · FURNITURE MATERIALS';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2919,7 +2987,7 @@ function resetLevel0State(){
   exitSequence.active=false;exitSequence.t=0;exitSequence.door=null;exitSequence.open=0;ui.exitFade.style.opacity='0';
   dynamicExitChunks.clear();activePitBarriers.clear();pitCrossStates.clear();activeExitKey=null;exitNeedsReplacement=true;
   regionPlans.clear();forcedComplexChunks.clear();chunkDefs.clear();activeChunkX=999999;activeChunkZ=999999;
-  player.x=SPAWN_X;player.z=SPAWN_Z;player.y=1.62;player.yaw=0;player.pitch=-.035;player.crouch=false;player.sprint=false;player.flash=false;player.steps=0;player.bobPhase=0;player.bobAmt=0;player.swayAmt=0;player.pitCooldown=0;player.falling=false;player.fallTime=0;player.health=100;player.stamina=100;player.staminaExhausted=false;player.staminaRegenDelay=0;
+  player.x=SPAWN_X;player.z=SPAWN_Z;player.y=1.62;resetJumpState();player.yaw=0;player.pitch=-.035;player.crouch=false;player.sprint=false;player.flash=false;player.steps=0;player.bobPhase=0;player.bobAmt=0;player.swayAmt=0;player.pitCooldown=0;player.falling=false;player.fallTime=0;player.health=100;player.stamina=100;player.staminaExhausted=false;player.staminaRegenDelay=0;
   journal=['ENTRY 01\nI woke up on wet carpet beneath fluorescent lights. I cannot remember falling.'];updateJournal();updateSurvivalHUD(100,100,false);
   ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');ui.light.classList.remove('active');ui.status.textContent='LIGHT: OFF';nearMarker=null;nearExitDoor=null;
   movePlayerToSafeSpawn(SPAWN_X,SPAWN_Z);restoreMainMenuCard();
@@ -2942,14 +3010,14 @@ function interact(){
 ui.use.addEventListener('click',interact);
 ui.escapeMenu.addEventListener('click',()=>{ui.escapeScreen.style.display='none';resetLevel0State();started=false;window.__lbStarted=false;setIntroHumMuted(false);ui.start.style.display='flex';document.getElementById('controls').style.opacity='1';document.getElementById('hud').style.opacity='1'});
 ui.escapeRestart.addEventListener('click',()=>{ui.escapeScreen.style.display='none';resetLevel0State();started=false;window.__lbStarted=false;setIntroHumMuted(false);beginGame()});
-function toggleJournal(force){const open=typeof force==='boolean'?force:!journalOpen;if(open)setControlsMenu(false);journalOpen=open;ui.journal.style.display=open?'flex':'none';joyX=joyY=0;ui.knob.style.transform='translate(0,0)';if(open){updateJournal();if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}else if(desktopFine&&shiftLockEnabled)setTimeout(requestLock,30)}
+function toggleJournal(force){setJumpPressed(false);const open=typeof force==='boolean'?force:!journalOpen;if(open)setControlsMenu(false);journalOpen=open;ui.journal.style.display=open?'flex':'none';joyX=joyY=0;ui.knob.style.transform='translate(0,0)';if(open){updateJournal();if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}else if(desktopFine&&shiftLockEnabled)setTimeout(requestLock,30)}
 ui.journalBtn.addEventListener('click',()=>toggleJournal(true));
 ui.closeJournal.addEventListener('click',()=>toggleJournal(false));
 
 let startLocked=false;
 const intro={active:false,t:0,impactPlayed:false};
 function startNoclipIntro(){
-  intro.active=true;intro.t=0;intro.impactPlayed=false;setIntroHumMuted(true);if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';
+  intro.active=true;intro.t=0;intro.impactPlayed=false;resetJumpState();setIntroHumMuted(true);if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';
   player.sprint=false;player.crouch=false;player.flash=false;player.steps=0;player.bobAmt=0;player.swayAmt=0;player.health=100;player.stamina=100;player.staminaExhausted=false;player.staminaRegenDelay=0;updateSurvivalHUD(player.health,player.stamina,false);setControlsMenu(false);
   ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');ui.light.classList.remove('active');ui.status.textContent='LIGHT: OFF';
   document.getElementById('controls').style.opacity='0';document.getElementById('hud').style.opacity='0';
@@ -2985,7 +3053,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.33 · FURNITURE MATERIALS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.34 · FURNITURE MATERIALS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
@@ -3011,7 +3079,7 @@ function finishPitFall(){
   forcedComplexChunks.add(cx+','+cz);chunkDefs.delete(cx+','+cz);
   const d=generateChunk(cx,cz);
   const rx=(d.bounds.x0+d.bounds.x1)*.5,rz=(d.bounds.z0+d.bounds.z1)*.5;
-  player.y=1.62;player.falling=false;player.fallTime=0;player.pitCooldown=1.35;player.steps=0;
+  player.y=1.62;resetJumpState();player.falling=false;player.fallTime=0;player.pitCooldown=1.35;player.steps=0;
   movePlayerToSafeSpawn(rx,rz);
   showHint('You hit the carpet hard in a deeper, more twisted section.',3.1);
 }
@@ -3023,15 +3091,58 @@ function startPitFall(){
 }
 
 
+// Variable-height jump: release early for a small hop, hold for a higher arc.
+// The floor stays y=0; the top surface of actual imported triangle meshes can
+// arrest a descent and support walking. Ceiling clearance keeps the camera sane.
+function updateJumpPhysics(dt){
+ const canStart=jump.grounded&&!player.falling&&!intro.active&&!exitSequence.active;
+ jump.buffer=Math.max(0,jump.buffer-dt);
+ if(canStart&&jump.buffer>0){
+  jump.grounded=false;jump.velocity=JUMP_SPEED;jump.holdTime=0;jump.buffer=0;
+ }
+ if(jump.grounded){
+  const footSupport=jumpSupportHeightAt(player.x,player.z,jump.footY-.24,jump.footY+.075);
+  const floor=Math.max(0,Math.min(footSupport,H-(player.crouch?1.13:1.62)-.10));
+  if(floor>=jump.footY-.085&&floor<=jump.footY+.085){
+   jump.footY=floor;jump.velocity=0;
+  }else{jump.grounded=false;jump.velocity=0;}
+ }
+ if(!jump.grounded){
+  const previous=jump.footY;
+  const boosted=jump.held&&jump.velocity>0&&jump.holdTime<JUMP_HOLD_WINDOW;
+  jump.holdTime+=dt;
+  const gravity=boosted?JUMP_HOLD_GRAVITY:JUMP_GRAVITY;
+  jump.velocity-=gravity*dt;
+  let next=previous+jump.velocity*dt;
+  // At full standing height there is only ~1.2m beneath the ceiling.
+  const headRoom=H-(player.crouch?1.13:1.62)-.09;
+  if(next>headRoom){next=headRoom;jump.velocity=Math.min(0,jump.velocity);}
+  if(jump.velocity<=0){
+   const h=jumpSupportHeightAt(player.x,player.z,Math.min(previous,next)-.03,previous+.045);
+   const landing=Math.max(0,Math.min(h,headRoom-.01));
+   if(next<=landing+.002&&previous>=landing-.05){
+    next=landing;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=landing>.09;
+   }
+  }
+  if(next<=0){next=0;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=false;}
+  jump.footY=next;
+ }
+ // Smooth eye-height when crouching, without easing vertical jumping motion.
+ const eyeTarget=player.crouch?1.12:1.62;
+ jump.eyeHeight+=(Math.min(eyeTarget,H-jump.footY-.06)-jump.eyeHeight)*Math.min(1,dt*12);
+ player.y=jump.footY+jump.eyeHeight;
+}
 function movement(dt){
  if(intro.active||exitSequence.active)return;
  if(player.falling){
+   setJumpPressed(false);jump.buffer=0;
    player.fallTime+=dt;
    player.y-=dt*(2.2+player.fallTime*8.5);
    player.bobAmt*=Math.max(0,1-dt*6);player.swayAmt*=Math.max(0,1-dt*6);
    if(player.fallTime>.62)finishPitFall();
    return;
  }
+ updateJumpPhysics(dt);
  let ix=joyX,iz=-joyY;
  if(keys['a'])ix-=1;if(keys['d'])ix+=1;if(keys['w'])iz+=1;if(keys['s'])iz-=1;
  const ml=Math.hypot(ix,iz);if(ml>1){ix/=ml;iz/=ml}
@@ -3054,12 +3165,12 @@ function movement(dt){
    if(player.staminaExhausted&&player.stamina>=45)player.staminaExhausted=false;
  }
  updateSurvivalHUD(player.health,player.stamina,player.staminaExhausted);
- player.y+=((player.crouch?1.12:1.62)-player.y)*Math.min(1,dt*10);
- const targetBob=moving?(player.crouch?.010:(running?.041:.026)):0;
- const targetSway=moving?(player.crouch?.006:(running?.030:.018)):0;
+ // player.y is driven by jump physics; do not pull it back to floor while airborne.
+ const targetBob=moving&&jump.grounded?(player.crouch?.010:(running?.041:.026)):0;
+ const targetSway=moving&&jump.grounded?(player.crouch?.006:(running?.030:.018)):0;
  player.bobAmt+=(targetBob-player.bobAmt)*Math.min(1,dt*(moving?8.5:11.5));
  player.swayAmt+=(targetSway-player.swayAmt)*Math.min(1,dt*(moving?7.0:10.0));
- if(moving){
+ if(moving&&jump.grounded){
    // One half-stride per real footfall. Bob/sway therefore remain synchronized
    // with actual distance travelled instead of continuing while pushing a wall.
    const stepDist=running?1.42:(player.crouch?1.55:1.38);
@@ -3071,7 +3182,7 @@ function movement(dt){
    }
  }
  player.pitCooldown=Math.max(0,player.pitCooldown-dt);
- if(player.pitCooldown<=0){
+ if(player.pitCooldown<=0&&jump.footY<.10){
    for(const p of pitQuads){
      if(pointInPit(player.x,player.z,p)){ startPitFall(); return; }
    }
@@ -3111,7 +3222,7 @@ function selectNearestFixtureHighlights(x,z){
 // Ultra-fine airborne dust, rendered as depth-tested translucent points.
 // Light is sourced from the same real fluorescent lightmap and flashlight beam
 // as the world, so dust stays nearly invisible without a directed light source.
-const DUST_COUNT=980;
+const DUST_COUNT=1450;
 const dustSeedData=new Float32Array(DUST_COUNT*4);
 (function initDustSeeds(){
   let n=0x24f20a37;
@@ -3126,6 +3237,7 @@ attribute vec4 aDust;
 uniform mat4 uDustVP;uniform vec3 uDustCam;uniform vec3 uDustForward;
 uniform float uDustTime;
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
+varying float vDustFine;varying float vDustVisibility;
 void main(){
   // A stable repeated volume around the camera, wrapped seamlessly by the walk.
   float driftX=(uDustTime*(.005+.013*aDust.w)+sin(uDustTime*.23+aDust.w*18.)*.018)/16.;
@@ -3138,14 +3250,25 @@ void main(){
   vDustWorld=p;vDustSeed=aDust.w;
   vec3 diff=p-uDustCam;vDustDepth=length(diff);
   gl_Position=uDustVP*vec4(p,1.0);
-  // 1-2 physical pixels at typical viewing distance, very faint and dispersed.
-  gl_PointSize=clamp(5.2/(.9+vDustDepth*.58),1.0,2.15)*(0.74+aDust.w*.60);
+  // Four interleaved particle scales, from the previous build's original maximum
+  // down to subpixel flecks. Fine motes dramatically outnumber visible flecks.
+  float q=aDust.w;
+  float scale=q<.66 ? (.14+.19*fract(q*23.7)) :
+              q<.87 ? (.33+.19*fract(q*39.1)) :
+              q<.974 ? (.53+.22*fract(q*19.3)) : (.80+.20*fract(q*81.0));
+  float oldSize=clamp(5.2/(.9+vDustDepth*.58),1.0,2.15)*(.74+aDust.w*.60);
+  float desired=oldSize*scale;
+  vDustFine=min(1.,desired);vDustVisibility=scale;
+  // Mobile GPU minimum point size is normally one physical pixel. Simulate
+  // smaller-than-a-pixel particles by reducing their fragment coverage/opacity.
+  gl_PointSize=max(1.,desired);
 }`;
 const dustFS=`precision mediump float;
 uniform vec3 uDustCam;uniform vec3 uDustForward;
 uniform float uDustFlash;uniform sampler2D uDustLightMap;
 uniform vec2 uDustMapMin;uniform vec2 uDustMapSize;
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
+varying float vDustFine;varying float vDustVisibility;
 void main(){
   vec2 disk=gl_PointCoord*2.0-1.0;
   float r2=dot(disk,disk);
@@ -3159,17 +3282,23 @@ void main(){
   vec2 lmuv=clamp((vDustWorld.xz-uDustMapMin)/uDustMapSize,vec2(.001),vec2(.999));
   float stored=texture2D(uDustLightMap,lmuv).r;
   float fixture=pow(clamp((stored-.027)/.973,0.0,1.0),1.35);
-  // Sparse visible flecks: most motes remain nearly transparent.
-  float rarity=mix(.20,1.0,smoothstep(.52,.91,vDustSeed));
+  // Opacity and size stratification. Nearly invisible particles dominate;
+  // the former build's brighter opacity is reserved for exceptionally rare motes.
+  float visibility=vDustSeed<.66 ? (.035+.10*fract(vDustSeed*33.7)) :
+                   vDustSeed<.87 ? (.15+.13*fract(vDustSeed*29.3)) :
+                   vDustSeed<.974 ? (.29+.30*fract(vDustSeed*17.3)) :
+                   (.62+.38*fract(vDustSeed*91.1));
+  visibility*=vDustFine*vDustFine;
+
   // World-fixed patches: occasionally a room has a more visible pocket of dust.
   // Other rooms stay almost clear; camera motion does not move these pockets.
   vec2 dustCell=floor(vDustWorld.xz/4.5);
   float pocket=fract(sin(dot(dustCell,vec2(91.37,127.19)))*43758.5453);
   float concentration=mix(.32,1.0,smoothstep(.49,.88,pocket));
   float proximity=1.0-smoothstep(6.0,16.0,vDustDepth);
-  float alpha=(.006+fixture*.095+beam*.24)*rarity*concentration*proximity;
+  float alpha=(.006+fixture*.095+beam*.24)*visibility*concentration*proximity;
   alpha*=(1.0-smoothstep(.18,1.0,r2));
-  if(alpha<.007)discard;
+  if(alpha<.0015)discard;
   vec3 tint=mix(vec3(.79,.76,.61),vec3(.91,.91,.85),beam*.8);
   gl_FragColor=vec4(tint,clamp(alpha,0.0,.29));
 }`;
@@ -3339,7 +3468,7 @@ function loop(now){
 
 updateJournal();updateSurvivalHUD(player.health,player.stamina,player.staminaExhausted);resize();
 addEventListener('resize',()=>{syncAppHeight();resize()},{passive:true});addEventListener('orientationchange',()=>{syncAppHeight();setTimeout(()=>{syncAppHeight();resize()},250)},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{if(fixtureHumWebAudioReady)ensureFixtureHumPlayback();else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};setJumpPressed(false);jump.buffer=0;joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{if(fixtureHumWebAudioReady)ensureFixtureHumPlayback();else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}}});
 document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(started&&!journalOpen)e.preventDefault()},{passive:false});
 window.addEventListener('orientationchange',()=>{setTimeout(()=>{syncAppHeight();resize()},120)},{passive:true});
