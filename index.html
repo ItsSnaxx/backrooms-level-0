@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.29 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.30 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.29</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.30 · FURNITURE TEST</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -1879,92 +1879,122 @@ function placeFloorFurniture(type,x,z,wallSide,angleJitter,out){
   const mesh=type==='table'?(Math.abs(Math.sin(x*1.9+z*.7))>.38?FURNITURE_MESHES.tableAlt:FURNITURE_MESHES.table):FURNITURE_MESHES[type];
   emitFurnitureMesh(mesh,x,0,z,yaw,0,0,out);
 }
-function placeClippedChair(refType,x,y,z,wallSide,out){
-  const baseYaw=wallSide===0?Math.PI*0.5:wallSide===1?-Math.PI*0.5:wallSide===2?0:Math.PI;
-  if(refType===0){
-    // Sideways, half-swallowed into a wall like the floating-chair reference.
-    emitFurnitureMesh(FURNITURE_MESHES.chair,x,y,z,baseYaw,0.20,Math.PI*0.54,out);
-  }else if(refType===1){
-    // More violent no-clip: upside angled into the wall.
-    emitFurnitureMesh(FURNITURE_MESHES.chair,x,y,z,baseYaw,-1.08,Math.PI*0.72,out);
-  }else{
-    // Leaning/overturned chair jammed into a corner near the floor.
-    emitFurnitureMesh(FURNITURE_MESHES.chair,x,y,z,baseYaw+0.18,0.34,Math.PI*1.14,out);
+// Build 0.9.30: deliberately dense furniture preview for reviewing real meshes.
+// The approved room generation is untouched. This only changes prop placement.
+const FURNITURE_PREVIEW_DENSE=true;
+function placeClippedChair(refType,wallX,wallZ,wallSide,out){
+  // wallSide: 0 west (+X visible), 1 east (-X visible),
+  //           2 north (+Z visible), 3 south (-Z visible).
+  const nx=wallSide===0?1:wallSide===1?-1:0;
+  const nz=wallSide===2?1:wallSide===3?-1:0;
+  const yaw=wallSide===0?Math.PI*.5:wallSide===1?-Math.PI*.5:wallSide===2?0:Math.PI;
+  // Three deliberately uncanny orientations matching the reference language:
+  // sideways floating, upside-down/diagonal high on the wall, and overturned low.
+  const pitch=refType===0?.20:refType===1?-1.08:.34;
+  const roll=refType===0?Math.PI*.54:refType===1?Math.PI*.72:Math.PI*1.14;
+  const targetY=refType===0?1.38:refType===1?1.88:.53;
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
+  const r00=cy*cr+sy*sp*sr, r01=-cy*sr+sy*sp*cr, r02=sy*cp;
+  const r10=cp*sr,            r11=cp*cr,             r12=-sp;
+  const r20=-sy*cr+cy*sp*sr, r21=sy*sr+cy*sp*cr,   r22=cy*cp;
+  // Find the *actual rotated imported model's* projection through the wall.
+  // Place the wall plane inside the mesh, with substantial furniture visible.
+  // This fixes the old issue in which a transformed chair could vanish entirely.
+  const mesh=FURNITURE_MESHES.chair;
+  let minDepth=Infinity,maxDepth=-Infinity,minHeight=Infinity,maxHeight=-Infinity;
+  for(let i=0;i<mesh.length;i+=7){
+    const px=mesh[i],py=mesh[i+1],pz=mesh[i+2];
+    const xx=px*r00+py*r01+pz*r02, yy=px*r10+py*r11+pz*r12, zz=px*r20+py*r21+pz*r22;
+    const depth=xx*nx+zz*nz;
+    minDepth=Math.min(minDepth,depth);maxDepth=Math.max(maxDepth,depth);
+    minHeight=Math.min(minHeight,yy);maxHeight=Math.max(maxHeight,yy);
   }
+  const wallFaceOffset=.12; // approximate exterior surface of the partition
+  const shift=wallFaceOffset+.055-(minDepth+maxDepth)*.5;
+  const y=targetY-(minHeight+maxHeight)*.5;
+  emitFurnitureMesh(mesh,wallX+nx*shift,y,wallZ+nz*shift,yaw,pitch,roll,out);
 }
-
 function addSparseFurniture(out){
- for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
-  const d=generateChunk(activeChunkX+dx,activeChunkZ+dz);
-  if(d.kind==='grid'||!d.rooms||!d.rooms.length)continue;
-  const r=chunkRng(d.cx+90317,d.cz-61243);
-  // Most chunks remain empty. The Backrooms should feel sparse and uncanny.
-  if(r()>.34)continue;
-  const medium=d.rooms.filter(a=>a.x1-a.x0>4.4&&a.z1-a.z0>4.4);
-  if(!medium.length)continue;
-  const large=medium.filter(a=>a.x1-a.x0>6.6&&a.z1-a.z0>6.6);
-  const placed=[];
-  const cluster=large.length&&r()<.055;
-  const clippedChance=.18;
-  const count=cluster?Math.min(6,2+Math.floor(r()*5)):1+(r()<.27?1:0);
-
-  function intersectsPlaced(x,z,radius){
-    return placed.some(a=>Math.hypot(x-a.x,z-a.z)<radius+a.radius+.42);
-  }
-  function validSpot(x,z,radius){
-    if(d.cx===0&&d.cz===0&&Math.hypot(x,z)<5) return false;
-    if(d.walls.some(a=>x>a.x0-radius-.20&&x<a.x1+radius+.20&&z>a.z0-radius-.20&&z<a.z1+radius+.20)) return false;
-    if(d.pits.some(a=>x>a.x0-2&&x<a.x1+2&&z>a.z0-2&&z<a.z1+2)) return false;
-    if(intersectsPlaced(x,z,radius)) return false;
-    return true;
-  }
-
-  for(let k=0;k<count;k++){
-    const room=(cluster&&large.length)?large[Math.floor(r()*large.length)]:medium[Math.floor(r()*medium.length)];
-    const w=room.x1-room.x0,h=room.z1-room.z0;
-    const type=cluster?(['chair','chair','table','sofa','chair','table'][k%6]):(r()<.50?'chair':r()<.78?'table':'sofa');
-    const radius=type==='sofa'?1.45:type==='table'?1.08:.66;
-    for(let tries=0;tries<18;tries++){
-      const edge=Math.floor(r()*4),inset=radius+.18;
-      const x=edge===0?room.x0+inset:edge===1?room.x1-inset:room.x0+inset+r()*Math.max(.01,w-2*inset);
-      const z=edge===2?room.z0+inset:edge===3?room.z1-inset:room.z0+inset+r()*Math.max(.01,h-2*inset);
-      if(!validSpot(x,z,radius))continue;
-      placed.push({x,z,radius});
-      placeFloorFurniture(type,x,z,edge,(r()-.5)*0.42,out);
-      break;
+  for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
+    const d=generateChunk(activeChunkX+dx,activeChunkZ+dz);
+    if(d.kind==='grid'||!d.rooms||!d.rooms.length)continue;
+    // A separate seeded generator keeps furniture stable as chunks stream in/out.
+    const r=chunkRng(d.cx+90317,d.cz-61243);
+    const placed=[];
+    const rooms=d.rooms.filter(a=>a.x1-a.x0>3.05&&a.z1-a.z0>3.05);
+    if(!rooms.length)continue;
+    // Deterministic but shuffled per chunk: all room styles get furniture,
+    // including the ordinary tight labyrinth where players spend most time.
+    const order=rooms.slice();
+    for(let i=order.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+    function intersectsPlaced(x,z,radius){
+      return placed.some(a=>Math.hypot(x-a.x,z-a.z)<radius+a.radius+.18);
     }
-  }
-
-  // Rare no-clipped chairs, inspired directly by the provided references.
-  if(r()<clippedChance){
-    const room=medium[Math.floor(r()*medium.length)],w=room.x1-room.x0,h=room.z1-room.z0;
-    const wallSide=Math.floor(r()*4);
-    const inset=.06, lateral=.85;
-    let x=0,z=0,y=.86+ r()*.28;
-    if(wallSide===0){ x=room.x0+inset; z=room.z0+lateral+r()*Math.max(.01,h-lateral*2); }
-    else if(wallSide===1){ x=room.x1-inset; z=room.z0+lateral+r()*Math.max(.01,h-lateral*2); }
-    else if(wallSide===2){ z=room.z0+inset; x=room.x0+lateral+r()*Math.max(.01,w-lateral*2); }
-    else { z=room.z1-inset; x=room.x0+lateral+r()*Math.max(.01,w-lateral*2); }
-    if(validSpot(x,z,.44)){
-      placed.push({x,z,radius:.44});
-      const refType=Math.floor(r()*3);
-      if(refType===2){
-        y=.02;
-        const cornerX = wallSide<2? x : (r()<.5?room.x0+.32:room.x1-.32);
-        const cornerZ = wallSide>=2? z : (r()<.5?room.z0+.32:room.z1-.32);
-        placeClippedChair(refType,cornerX,y,cornerZ,wallSide,out);
-      }else{
-        // Embed the chair more deeply so it reads as a true no-clip artifact.
-        const embed = .17 + r()*.13;
-        if(wallSide===0) x -= embed;
-        else if(wallSide===1) x += embed;
-        else if(wallSide===2) z -= embed;
-        else z += embed;
-        placeClippedChair(refType,x,y,z,wallSide,out);
+    function hasSolidWall(x,z,clear,except){
+      return d.walls.some(w=>w!==except&&!w.invisible&&!w.door&&
+        (w.y0||0)<1.05&&(w.y1||H)>1.2&&
+        x>w.x0-clear&&x<w.x1+clear&&z>w.z0-clear&&z<w.z1+clear);
+    }
+    function safeFloorSpot(x,z,radius){
+      if(d.cx===0&&d.cz===0&&Math.hypot(x,z)<3.2)return false;
+      if(hasSolidWall(x,z,radius+.10,null))return false;
+      if(d.pits.some(a=>x>a.x0-radius-1&&x<a.x1+radius+1&&z>a.z0-radius-1&&z<a.z1+radius+1))return false;
+      if(intersectsPlaced(x,z,radius))return false;
+      return true;
+    }
+    let floorCount=0;
+    const FLOOR_CAP=19;   // stress-test, deliberately far above 0.9.29
+    for(let i=0;i<order.length&&floorCount<FLOOR_CAP;i++){
+      if(r()>.91)continue;
+      const room=order[i],w=room.x1-room.x0,h=room.z1-room.z0;
+      const triesInRoom=(w*h>28&&r()<.44)?2:1;
+      for(let k=0;k<triesInRoom&&floorCount<FLOOR_CAP;k++){
+        // Ensure all major model types are common enough to find quickly.
+        const sequence=['chair','sofa','chair','table','sofa','chair','table'];
+        let type=sequence[(floorCount+k+Math.floor(r()*2))%sequence.length];
+        if(type==='sofa'&&(w<4.0||h<3.9))type='chair';
+        const radius=type==='sofa'?.84:type==='table'?.72:.49;
+        for(let tries=0;tries<30;tries++){
+          const edge=Math.floor(r()*4),inset=radius+.24;
+          const x=edge===0?room.x0+inset:edge===1?room.x1-inset:room.x0+inset+r()*Math.max(.01,w-2*inset);
+          const z=edge===2?room.z0+inset:edge===3?room.z1-inset:room.z0+inset+r()*Math.max(.01,h-2*inset);
+          if(!safeFloorSpot(x,z,radius))continue;
+          placed.push({x,z,radius});
+          placeFloorFurniture(type,x,z,edge,(r()-.5)*.62,out);
+          floorCount++;
+          break;
+        }
       }
     }
+    // Unlike ordinary floor props, no-clipped objects MUST intersect the wall.
+    // Choose real structural walls, not hypothetical room-cell borders, and
+    // validate only the *exposed side* for clear, visible space.
+    const wallCandidates=d.walls.filter(w=>{
+      if(w.invisible||w.door||w.halfWall||w.crawl||w.pillar||(w.y0||0)>.04||(w.y1||H)<2.2)return false;
+      const ww=w.x1-w.x0,hh=w.z1-w.z0;
+      return (ww<.45&&hh>2.15)||(hh<.45&&ww>2.15);
+    });
+    const clipTarget=wallCandidates.length?5+Math.floor(r()*3):0;
+    let clips=0;
+    for(let attempts=0;attempts<clipTarget*35&&clips<clipTarget;attempts++){
+      const wall=wallCandidates[Math.floor(r()*wallCandidates.length)];
+      const vertical=(wall.x1-wall.x0)<(wall.z1-wall.z0);
+      const side=vertical?(r()<.5?0:1):(r()<.5?2:3);
+      const nx=side===0?1:side===1?-1:0,nz=side===2?1:side===3?-1:0;
+      const wx=vertical?(wall.x0+wall.x1)*.5:wall.x0+.58+(wall.x1-wall.x0-1.16)*r();
+      const wz=vertical?wall.z0+.58+(wall.z1-wall.z0-1.16)*r():(wall.z0+wall.z1)*.5;
+      const probeX=wx+nx*.74,probeZ=wz+nz*.74;
+      if(d.cx===0&&d.cz===0&&Math.hypot(wx,wz)<3.6)continue;
+      if(!d.rooms.some(rm=>probeX>rm.x0+.14&&probeX<rm.x1-.14&&probeZ>rm.z0+.14&&probeZ<rm.z1-.14))continue;
+      if(hasSolidWall(probeX,probeZ,.18,wall))continue;
+      if(d.pits.some(a=>probeX>a.x0-.8&&probeX<a.x1+.8&&probeZ>a.z0-.8&&probeZ<a.z1+.8))continue;
+      if(intersectsPlaced(probeX,probeZ,.48))continue;
+      placed.push({x:probeX,z:probeZ,radius:.48});
+      const refType=clips%3; // make all three reference poses easy to encounter
+      placeClippedChair(refType,wx,wz,side,out);
+      clips++;
+    }
   }
- }
 }
 function buildWorld(){
   const out=[],pad=1.0;
@@ -2640,7 +2670,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.29';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.30 · FURNITURE TEST';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2715,7 +2745,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.29'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.30 · FURNITURE TEST'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
