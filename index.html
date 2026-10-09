@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.26</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.27</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -1202,10 +1202,21 @@ function startCanvasFallback(){
   function fbThrowToComplex(){
     let cx=chunkCoord(px),cz=chunkCoord(pz);
     for(let tries=0;tries<40;tries++){const tx=cx+(Math.random()<.5?-1:1)*(7+Math.floor(Math.random()*7)),tz=cz+(Math.random()<.5?-1:1)*(6+Math.floor(Math.random()*7));if(specialKind(tx,tz)==='normal'){cx=tx;cz=tz;break}}
-    forcedComplexChunks.add(cx+','+cz);chunkDefs.delete(cx+','+cz);const d=generateChunk(cx,cz);px=(d.bounds.x0+d.bounds.x1)*.5;pz=(d.bounds.z0+d.bounds.z1)*.5;
+    forcedComplexChunks.add(cx+','+cz);chunkDefs.delete(cx+','+cz);const d=generateChunk(cx,cz);const rawX=(d.bounds.x0+d.bounds.x1)*.5,rawZ=(d.bounds.z0+d.bounds.z1)*.5,safe=fbFindSafeSpawn(rawX,rawZ);px=safe.x;pz=safe.z;
     hintEl.textContent='You hit the carpet hard in a deeper, more twisted section.';setTimeout(()=>{if(hintEl.textContent.includes('deeper'))hintEl.textContent=''},2600);
   }
-  let px=0,pz=0,ang=.15,pitch=0,crouch=false,run=false,flashlight=false,fbFalling=false,fbFallTime=0,fbHealth=100,fbStamina=100,fbStaminaExhausted=false,fbStaminaDelay=0;
+  function fbSpawnBlocked(x,z,r=.42){
+    const pts=[[x-r,z-r],[x+r,z-r],[x-r,z+r],[x+r,z+r],[x,z]];
+    for(const q of pts)if(isWallWorld(q[0],q[1])||pitAt(q[0],q[1]))return true;
+    return false;
+  }
+  function fbFindSafeSpawn(x,z){
+    if(!fbSpawnBlocked(x,z))return{x,z};
+    const step=.46;for(let rr=step;rr<=11;rr+=step){const n=Math.max(12,Math.ceil(Math.PI*2*rr/step));for(let i=0;i<n;i++){const a=i/n*Math.PI*2,nx=x+Math.cos(a)*rr,nz=z+Math.sin(a)*rr;if(!fbSpawnBlocked(nx,nz))return{x:nx,z:nz}}}
+    return{x,z};
+  }
+  const fbInitialSpawn=fbFindSafeSpawn(0,0);
+  let px=fbInitialSpawn.x,pz=fbInitialSpawn.z,ang=.15,pitch=0,crouch=false,run=false,flashlight=false,fbFalling=false,fbFallTime=0,fbHealth=100,fbStamina=100,fbStaminaExhausted=false,fbStaminaDelay=0;
   let fbIntro=true,fbIntroT=0;
   const keys={};let joyX=0,joyY=0,moveId=null,lookId=null,startX=0,startY=0,lastX=0,lastY=0;
   let bobPhase=0,bobAmt=0,stepTimer=0,lastT=performance.now(),journalOpen=false;
@@ -1972,7 +1983,62 @@ function uploadGeneratedLightMap(){
 const SPAWN_X=0,SPAWN_Z=0;
 rebuildActiveWorld(0,0,true);
 
-const player={x:SPAWN_X,z:SPAWN_Z,y:1.62,yaw:0,pitch:-.035,crouch:false,sprint:false,flash:false,steps:0,bobPhase:0,bobAmt:0,swayAmt:0,pitCooldown:0,falling:false,fallTime:0,health:100,stamina:100,staminaExhausted:false,staminaRegenDelay:0};
+// Build 0.9.27 — spawn safety. Procedural cuts can occasionally place the nominal
+// origin directly on an internal divider. Never hand control to the player until
+// their full collision circle (plus a comfort margin) is on clear, non-pit floor.
+function spawnCircleHitsRect(x,z,r,rect){
+  const qx=Math.max(rect.x0,Math.min(x,rect.x1)),qz=Math.max(rect.z0,Math.min(z,rect.z1));
+  const dx=x-qx,dz=z-qz;return dx*dx+dz*dz<r*r;
+}
+function spawnPointBlocked(x,z,clearance=RADIUS+.18){
+  for(const w of wallRects){
+    if((w.y1??H)<=.05)continue;
+    if(x<w.x0-clearance||x>w.x1+clearance||z<w.z0-clearance||z>w.z1+clearance)continue;
+    if(spawnCircleHitsRect(x,z,clearance,w))return true;
+  }
+  for(const p of pitQuads)if(spawnCircleHitsRect(x,z,clearance+.08,p))return true;
+  return false;
+}
+function findSafeSpawnPosition(preferredX,preferredZ){
+  const candidates=[{x:preferredX,z:preferredZ,d:0}];
+  const pcx=chunkCoord(preferredX),pcz=chunkCoord(preferredZ);
+  // Prefer believable room interiors first. Room centers are naturally far from
+  // perimeter walls; quarter-offset samples handle pillars/feature dividers.
+  for(let cr=0;cr<=1;cr++)for(let dz=-cr;dz<=cr;dz++)for(let dx=-cr;dx<=cr;dx++){
+    if(cr&&Math.abs(dx)!==cr&&Math.abs(dz)!==cr)continue;
+    const d=generateChunk(pcx+dx,pcz+dz);
+    for(const rm of d.rooms||[]){
+      const cx=(rm.x0+rm.x1)*.5,cz=(rm.z0+rm.z1)*.5,hw=(rm.x1-rm.x0)*.18,hd=(rm.z1-rm.z0)*.18;
+      const pts=[[cx,cz],[cx-hw,cz],[cx+hw,cz],[cx,cz-hd],[cx,cz+hd]];
+      for(const p of pts)candidates.push({x:p[0],z:p[1],d:(p[0]-preferredX)**2+(p[1]-preferredZ)**2});
+    }
+  }
+  candidates.sort((a,b)=>a.d-b.d);
+  for(const c of candidates)if(!spawnPointBlocked(c.x,c.z,RADIUS+.20))return{x:c.x,z:c.z};
+
+  // Last-resort concentric floor scan. This is deterministic and only runs when
+  // every room-center candidate is obstructed by unusual generated geometry.
+  const step=.46,maxR=11;
+  for(let rr=step;rr<=maxR;rr+=step){
+    const n=Math.max(12,Math.ceil((Math.PI*2*rr)/step));
+    for(let i=0;i<n;i++){
+      const a=(i/n)*Math.PI*2,x=preferredX+Math.cos(a)*rr,z=preferredZ+Math.sin(a)*rr;
+      if(!spawnPointBlocked(x,z,RADIUS+.20))return{x,z};
+    }
+  }
+  return{x:preferredX,z:preferredZ};
+}
+function movePlayerToSafeSpawn(preferredX,preferredZ){
+  const targetChunkX=chunkCoord(preferredX),targetChunkZ=chunkCoord(preferredZ);
+  rebuildActiveWorld(targetChunkX,targetChunkZ,true);
+  const safe=findSafeSpawnPosition(preferredX,preferredZ);
+  player.x=safe.x;player.z=safe.z;
+  if(chunkCoord(safe.x)!==activeChunkX||chunkCoord(safe.z)!==activeChunkZ)rebuildActiveWorld(chunkCoord(safe.x),chunkCoord(safe.z),true);
+  return safe;
+}
+
+const __initialSafeSpawn=findSafeSpawnPosition(SPAWN_X,SPAWN_Z);
+const player={x:__initialSafeSpawn.x,z:__initialSafeSpawn.z,y:1.62,yaw:0,pitch:-.035,crouch:false,sprint:false,flash:false,steps:0,bobPhase:0,bobAmt:0,swayAmt:0,pitCooldown:0,falling:false,fallTime:0,health:100,stamina:100,staminaExhausted:false,staminaRegenDelay:0};
 let joyX=0,joyY=0,keys={},started=false,journalOpen=false,last=performance.now(),worldTime=0,lightLevel=1,hintTimer=0,nearMarker=null,nearExitDoor=null;
 const notesText=[
  'The buzzing gets louder when I try to retrace my steps. I do not think it is electrical.',
@@ -2397,7 +2463,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.26';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.27';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2409,7 +2475,7 @@ function resetLevel0State(){
   player.x=SPAWN_X;player.z=SPAWN_Z;player.y=1.62;player.yaw=0;player.pitch=-.035;player.crouch=false;player.sprint=false;player.flash=false;player.steps=0;player.bobPhase=0;player.bobAmt=0;player.swayAmt=0;player.pitCooldown=0;player.falling=false;player.fallTime=0;player.health=100;player.stamina=100;player.staminaExhausted=false;player.staminaRegenDelay=0;
   journal=['ENTRY 01\nI woke up on wet carpet beneath fluorescent lights. I cannot remember falling.'];updateJournal();updateSurvivalHUD(100,100,false);
   ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');ui.light.classList.remove('active');ui.status.textContent='LIGHT: OFF';nearMarker=null;nearExitDoor=null;
-  rebuildActiveWorld(0,0,true);restoreMainMenuCard();
+  movePlayerToSafeSpawn(SPAWN_X,SPAWN_Z);restoreMainMenuCard();
 }
 function showEscapedScreen(){
   if(!exitSequence.active)return;
@@ -2472,8 +2538,11 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.26'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
- requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.27'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ requestAnimationFrame(()=>{
+  if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
+  ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
+ });
 }
 let lastStartGesture=0;
 function startGesture(e){if(e){e.preventDefault();e.stopPropagation()}const now=performance.now();if(now-lastStartGesture<320)return;lastStartGesture=now;try{startAudio()}catch(_){};beginGame(e)}
@@ -2495,8 +2564,8 @@ function finishPitFall(){
   forcedComplexChunks.add(cx+','+cz);chunkDefs.delete(cx+','+cz);
   const d=generateChunk(cx,cz);
   const rx=(d.bounds.x0+d.bounds.x1)*.5,rz=(d.bounds.z0+d.bounds.z1)*.5;
-  player.x=rx;player.z=rz;player.y=1.62;player.falling=false;player.fallTime=0;player.pitCooldown=1.35;player.steps=0;
-  rebuildActiveWorld(chunkCoord(player.x),chunkCoord(player.z),true);
+  player.y=1.62;player.falling=false;player.fallTime=0;player.pitCooldown=1.35;player.steps=0;
+  movePlayerToSafeSpawn(rx,rz);
   showHint('You hit the carpet hard in a deeper, more twisted section.',3.1);
 }
 function startPitFall(){
