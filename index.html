@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.25</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.26</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -2054,13 +2054,14 @@ function resize(){
 let audio=null,master=null,noiseBuffer=null,fixtureHumBuffer=null,footstepBuffer=null,bodyFallBuffer=null,audioDecodeStarted=false,bodyFallDecodeStarted=false;
 let fixtureHumVoices=[],lastHumAssign=-999,lastStepIndex=-1,stepSide=-1;
 let fixtureHumFallback=null,stepFallbackPool=[],stepFallbackCursor=0,bodyFallFallback=null;
+let fixtureHumWebAudioReady=false;
 let introHumMuted=false;
 function setIntroHumMuted(muted){
  introHumMuted=!!muted;
  try{
-  if(fixtureHumFallback){
+  if(fixtureHumFallback&&!fixtureHumWebAudioReady){
    fixtureHumFallback.muted=false;
-   fixtureHumFallback.volume=introHumMuted?0:(fixtureHumBuffer?.09:.18);
+   fixtureHumFallback.volume=introHumMuted?0:.18;
   }
  }catch(_){}
  if(audio&&fixtureHumVoices.length){
@@ -2098,28 +2099,46 @@ function makeTrimmedHumLoop(raw,trimSeconds=.16,seamSeconds=.012){
   return out;
  }catch(e){console.warn('Hum trim preparation failed:',e);return raw}
 }
-function stopFixtureHumFallback(){
+function stopFixtureHumFallback(permanent=false){
  try{
   if(fixtureHumFallback){
    fixtureHumFallback.volume=0;
    fixtureHumFallback.pause();
    fixtureHumFallback.currentTime=0;
+   if(permanent){
+    try{fixtureHumFallback.removeAttribute('src');fixtureHumFallback.load()}catch(_){}
+    fixtureHumFallback=null;
+   }
   }
  }catch(_){}
+}
+function ensureFixtureHumPlayback(){
+ if(!audio||!fixtureHumBuffer||!fixtureHumWebAudioReady)return;
+ const restore=()=>{
+  stopFixtureHumFallback(true);
+  if(!fixtureHumVoices.length)initFixtureHumVoices();
+  updateFixtureHum(true);
+ };
+ try{
+  if(audio.state==='suspended'||audio.state==='interrupted'){
+   const p=audio.resume();
+   if(p&&typeof p.then==='function')p.then(restore).catch(()=>{});
+  }else restore();
+ }catch(_){restore()}
 }
 
 function setAudioPos(p,x,y,z){try{if(p.positionX){p.positionX.value=x;p.positionY.value=y;p.positionZ.value=z}else if(p.setPosition)p.setPosition(x,y,z)}catch(_){}}
 function setListenerPose(){if(!audio)return;try{const L=audio.listener,x=player.x,y=player.y,z=player.z,fx=Math.sin(player.yaw)*Math.cos(player.pitch),fy=Math.sin(player.pitch),fz=Math.cos(player.yaw)*Math.cos(player.pitch);if(L.positionX){L.positionX.value=x;L.positionY.value=y;L.positionZ.value=z;L.forwardX.value=fx;L.forwardY.value=fy;L.forwardZ.value=fz;L.upX.value=0;L.upY.value=1;L.upZ.value=0}else{if(L.setPosition)L.setPosition(x,y,z);if(L.setOrientation)L.setOrientation(fx,fy,fz,0,1,0)}}catch(_){}}
 function ensureMediaFallbacks(){
  try{
-  if(!fixtureHumFallback){fixtureHumFallback=new Audio(FIXTURE_HUM_AUDIO);fixtureHumFallback.loop=true;fixtureHumFallback.preload='auto';fixtureHumFallback.volume=.18;fixtureHumFallback.playsInline=true}
+  if(!fixtureHumWebAudioReady&&!fixtureHumFallback){fixtureHumFallback=new Audio(FIXTURE_HUM_AUDIO);fixtureHumFallback.loop=true;fixtureHumFallback.preload='auto';fixtureHumFallback.volume=.18;fixtureHumFallback.playsInline=true}
   if(!stepFallbackPool.length){for(let i=0;i<4;i++){const a=new Audio(FOOTSTEP_AUDIO);a.preload='auto';a.playsInline=true;a.volume=1;stepFallbackPool.push(a)}}
   if(!bodyFallFallback){bodyFallFallback=new Audio(BODY_FALL_AUDIO);bodyFallFallback.preload='auto';bodyFallFallback.playsInline=true;bodyFallFallback.volume=.86}
  }catch(e){console.warn('HTML audio fallback unavailable:',e)}
 }
 function unlockProvidedMedia(){
  ensureMediaFallbacks();
- try{if(fixtureHumFallback){fixtureHumFallback.muted=false;fixtureHumFallback.volume=introHumMuted?0:.18;const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){ }
+ try{if(!fixtureHumWebAudioReady&&fixtureHumFallback){fixtureHumFallback.muted=false;fixtureHumFallback.volume=introHumMuted?0:.18;const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){ }
  // Prime the footstep elements during the user gesture so iOS permits later playback.
  for(const a of stepFallbackPool){try{a.muted=true;a.volume=.01;const p=a.play();if(p&&p.then)p.then(()=>{a.pause();a.currentTime=0;a.muted=false;a.volume=1}).catch(()=>{a.muted=false;a.volume=1})}catch(_){a.muted=false;a.volume=1}}
  try{if(bodyFallFallback){bodyFallFallback.muted=true;bodyFallFallback.volume=.01;const p=bodyFallFallback.play();if(p&&p.then)p.then(()=>{bodyFallFallback.pause();bodyFallFallback.currentTime=0;bodyFallFallback.muted=false;bodyFallFallback.volume=.86}).catch(()=>{bodyFallFallback.muted=false;bodyFallFallback.volume=.86})}}catch(_){ }
@@ -2182,8 +2201,10 @@ function beginProvidedAudioDecode(){
    // Preserve the exact supplied hum recording. Remove only the short lead-in
    // that caused the audible pause, then loop the decoded PCM sample-accurately.
    fixtureHumBuffer=makeTrimmedHumLoop(res[0].value,.16,.012);
-   initFixtureHumVoices();updateFixtureHum(true);stopFixtureHumFallback();
-   console.info('Original fluorescent recording loop ready:',fixtureHumBuffer.duration.toFixed(2)+'s (lead-in trimmed)')
+   fixtureHumWebAudioReady=true;
+   stopFixtureHumFallback(true);
+   initFixtureHumVoices();updateFixtureHum(true);
+   console.info('Original fluorescent recording loop locked to persistent Web Audio:',fixtureHumBuffer.duration.toFixed(2)+'s')
   }else console.warn('Hum decode failed:',res[0].reason);
   if(res[1].status==='fulfilled'){footstepBuffer=res[1].value;console.info('Footstep recording ready:',footstepBuffer.duration.toFixed(2)+'s')}else console.warn('Footstep decode failed:',res[1].reason);
   try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){ }
@@ -2195,6 +2216,7 @@ function startAudio(){
  try{
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
   audio=new AC();master=audio.createGain();master.gain.value=.96;master.connect(audio.destination);noiseBuffer=makeNoiseBuffer();
+  try{audio.addEventListener('statechange',()=>{if(fixtureHumWebAudioReady&&audio&&audio.state==='running')ensureFixtureHumPlayback()})}catch(_){}
   // Tiny one-shot forces the context to become audible inside the NOCLIP gesture on iOS.
   const o=audio.createOscillator(),g=audio.createGain();g.gain.value=.00001;o.connect(g);g.connect(master);o.start();o.stop(audio.currentTime+.02);
   const p=audio.resume();if(p&&p.catch)p.catch(()=>{});beginBodyFallDecode();return true
@@ -2375,7 +2397,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.25';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.26';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2450,7 +2472,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.25'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.26'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()});
 }
 let lastStartGesture=0;
@@ -2668,12 +2690,13 @@ function loop(now){
 
 updateJournal();updateSurvivalHUD(player.health,player.stamina,player.staminaExhausted);resize();
 addEventListener('resize',()=>{syncAppHeight();resize()},{passive:true});addEventListener('orientationchange',()=>{syncAppHeight();setTimeout(()=>{syncAppHeight();resize()},250)},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){keys={};joyX=joyY=0;player.sprint=false;ui.sprint.classList.remove('active');setControlsMenu(false);ui.knob.style.transform='translate(0,0)'}else{if(fixtureHumWebAudioReady)ensureFixtureHumPlayback();else{try{if(audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}}});
 document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(started&&!journalOpen)e.preventDefault()},{passive:false});
 window.addEventListener('orientationchange',()=>{setTimeout(()=>{syncAppHeight();resize()},120)},{passive:true});
 if(window.visualViewport){visualViewport.addEventListener('resize',()=>{syncAppHeight();resize()},{passive:true});}
-window.addEventListener('pageshow',()=>{syncAppHeight();try{if(started&&audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){};try{if(started&&fixtureHumFallback&&fixtureHumFallback.paused){const p=fixtureHumFallback.play();if(p&&p.catch)p.catch(()=>{})}}catch(_){}},{passive:true});
+window.addEventListener('pageshow',()=>{syncAppHeight();if(started&&fixtureHumWebAudioReady)ensureFixtureHumPlayback();else{try{if(started&&audio&&audio.state==='suspended'){const p=audio.resume();if(p&&p.catch)p.catch(()=>{})}}catch(_){}}},{passive:true});
+window.addEventListener('focus',()=>{if(started&&fixtureHumWebAudioReady)ensureFixtureHumPlayback()},{passive:true});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();showHint('Graphics paused. Return to the page to restore the renderer.',2.5)});
 canvas.addEventListener('webglcontextrestored',()=>{syncAppHeight();resize()});
 requestAnimationFrame(loop);
