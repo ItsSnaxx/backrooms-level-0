@@ -88,7 +88,7 @@
   .controlDesc{letter-spacing:.035em}
   #stick{position:absolute;left:calc(env(safe-area-inset-left) + 22px);bottom:calc(env(safe-area-inset-bottom) + 22px);width:114px;height:114px;border-radius:50%;border:1px solid rgba(242,239,211,.17);background:rgba(15,15,10,.16);pointer-events:auto;touch-action:none;backdrop-filter:blur(2px)}
   #knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px;border-radius:50%;background:rgba(242,239,211,.11);border:1px solid rgba(242,239,211,.25);transform:translate(0,0)}
-  #buttons{position:absolute;right:calc(env(safe-area-inset-right) + 18px);bottom:calc(env(safe-area-inset-bottom) + 18px);display:grid;grid-template-columns:repeat(2,58px);gap:10px;pointer-events:auto}
+  #buttons{position:absolute;right:calc(env(safe-area-inset-right) + 18px);bottom:calc(env(safe-area-inset-bottom) + 18px);display:grid;grid-template-columns:repeat(3,58px);gap:10px;pointer-events:auto}
   .btn{width:58px;height:58px;border-radius:50%;border:1px solid rgba(242,239,211,.18);background:rgba(12,12,8,.32);color:rgba(245,241,211,.82);font:700 10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;backdrop-filter:blur(3px);touch-action:none}
   .btn:active,.btn.active{background:rgba(236,229,167,.18);border-color:rgba(245,238,181,.45)}
   #jump{position:absolute;right:calc(env(safe-area-inset-right) + 24px);bottom:calc(env(safe-area-inset-bottom) + clamp(190px,27vh,220px));width:46px;height:46px;border-radius:50%;border:1px solid rgba(242,239,211,.24);background:rgba(12,12,8,.37);color:rgba(245,241,211,.84);font:700 9px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.075em;backdrop-filter:blur(3px);pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;box-shadow:0 4px 13px rgba(0,0,0,.15)}
@@ -311,6 +311,7 @@ body.game-paused #grain{animation-play-state:paused}
     <button class="btn" id="crouch" type="button">CROUCH</button>
     <button class="btn" id="light" type="button">LIGHT</button>
     <button class="btn" id="use" type="button">USE</button>
+    <button class="btn" id="focus" type="button">FOCUS</button>
   </div>
   <button id="jump" type="button" aria-label="Jump, hold to jump higher">JUMP</button>
   <button id="shiftLock" type="button" aria-label="Toggle desktop shift lock">SHIFT LOCK</button>
@@ -329,16 +330,18 @@ body.game-paused #grain{animation-play-state:paused}
     <div class="controlRow"><span class="controlKey">Q</span><span class="controlDesc">Journal</span></div>
     <div class="controlRow"><span class="controlKey">SHIFT+L</span><span class="controlDesc">Shift lock</span></div>
     <div class="controlRow"><span class="controlKey">B</span><span class="controlDesc">Controls menu</span></div>
+    <div class="controlRow"><span class="controlKey">MMB HOLD</span><span class="controlDesc">Focus zoom</span></div>
     <div class="controlSection">TOUCH</div>
     <div class="controlRow"><span class="controlKey">STICK</span><span class="controlDesc">Move</span></div>
     <div class="controlRow"><span class="controlKey">DRAG</span><span class="controlDesc">Look around</span></div>
     <div class="controlRow"><span class="controlKey">RUN</span><span class="controlDesc">Toggle sprint</span></div>
     <div class="controlRow"><span class="controlKey">JUMP</span><span class="controlDesc">Tap low · hold higher</span></div>
+    <div class="controlRow"><span class="controlKey">FOCUS</span><span class="controlDesc">Hold to zoom in</span></div>
   </div>
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.37 · PAUSE + CUSTOM SETTINGS</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.38 · FOCUS ZOOM + BETTER NOTES</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -771,6 +774,13 @@ function generateChunk(cx,cz){
     // islands of visibility across the bridges with real darkness between them.
     const pitLights=[[.22,.22],[.78,.22],[.50,.50],[.22,.78],[.78,.78]];
     for(const q of pitLights)addFixture(x0+roomW*q[0],z0+roomD*q[1],0);
+    const bridgeSpots=[];
+    for(let j=0;j<n-1;j++){const zz=z0+(j+1)*pitZ+j*bridge+bridge*.5;bridgeSpots.push({x:(x0+x1)*.5,z:zz});}
+    for(let i=0;i<n-1;i++){const xx=x0+(i+1)*pitX+i*bridge+bridge*.5;bridgeSpots.push({x:xx,z:(z0+z1)*.5});}
+    for(let i=0;i<Math.min(2,bridgeSpots.length);i++){
+      const pick=bridgeSpots[Math.floor(r()*bridgeSpots.length)];
+      def.notes.push({x:pick.x+crr(r,-.26,.26),z:pick.z+crr(r,-.26,.26),taken:false,rot:crr(r,-.6,.6),variant:r(),pit:true});
+    }
     return finishSpecial();
   }
   function buildExitRoom(){
@@ -1244,8 +1254,18 @@ function generateChunk(cx,cz){
     }
   }
 
-  if(r()<.0105){
-    const rm=def.rooms[Math.floor(r()*def.rooms.length)];if(rm){const x=crr(r,rm.x0+1.05,rm.x1-1.05),z=crr(r,rm.z0+1.05,rm.z1-1.05);def.notes.push({x,z,taken:false})}
+  let noteChance=roomStyle==='corridor'?.040:.032;
+  if(def.rooms.length>14)noteChance+=.004;
+  if(r()<noteChance&&def.rooms.length){
+    const rm=def.rooms[Math.floor(r()*def.rooms.length)];
+    if(rm){
+      const x=crr(r,rm.x0+1.05,rm.x1-1.05),z=crr(r,rm.z0+1.05,rm.z1-1.05);
+      def.notes.push({x,z,taken:false,rot:crr(r,-.7,.7),variant:r()});
+      if(r()<.20&&def.rooms.length>3){
+        const rm2=def.rooms[Math.floor(r()*def.rooms.length)];
+        if(rm2){const x2=crr(r,rm2.x0+1.05,rm2.x1-1.05),z2=crr(r,rm2.z0+1.05,rm2.z1-1.05);def.notes.push({x:x2,z:z2,taken:false,rot:crr(r,-.7,.7),variant:r()})}
+      }
+    }
   }
   def.fixtures=canonicalizeFixtures(def.fixtures);
   chunkDefs.set(key,def);return def;
@@ -1574,7 +1594,7 @@ window.__lbEngineReady=true;
 const ui={
  start:document.getElementById('start'),enter:document.getElementById('enter'),
  stick:document.getElementById('stick'),knob:document.getElementById('knob'),
- sprint:document.getElementById('sprint'),crouch:document.getElementById('crouch'),light:document.getElementById('light'),use:document.getElementById('use'),jump:document.getElementById('jump'),
+ sprint:document.getElementById('sprint'),crouch:document.getElementById('crouch'),light:document.getElementById('light'),use:document.getElementById('use'),focus:document.getElementById('focus'),jump:document.getElementById('jump'),
  status:document.getElementById('status'),hint:document.getElementById('hint'),levelTag:document.getElementById('levelTag'),
  shiftLock:document.getElementById('shiftLock'),journalBtn:document.getElementById('journalBtn'),journal:document.getElementById('journal'),
  entries:document.getElementById('journalEntries'),closeJournal:document.getElementById('closeJournal'),
@@ -1997,6 +2017,19 @@ void main(){
     float tick=floor(uTime*(7.0+seed*5.0));
     float flick=mix(.30,1.0,smoothstep(.22,.72,hash(vec2(tick,seed*91.0))));
     base=vec3(1.32,1.25,.88)*flick;
+  }else if(vM>33.5&&vM<34.5){
+    vec3 nrm=normalize(vN);
+    float grain=n2(vP.xz*18.0+vP.y*31.0);
+    base=vec3(.82,.77,.57)*(.92+.10*grain);
+    float crease=.5+.5*sin(vP.x*27.0+vP.z*18.0+n2(vP.xz*7.0)*2.2);
+    base*=1.0-.10*smoothstep(.78,.98,crease);
+    if(nrm.y>.62){
+      float ruled=smoothstep(.78,.97,sin(vP.z*108.0+n2(vP.xz*6.0)*2.0))*.14;
+      float scribble=n2(vP.xz*38.0+vec2(4.0,11.0))*step(.48,n2(vP.xz*9.0+vec2(13.0,7.0)));
+      base=mix(base,vec3(.56,.54,.48),ruled);
+      base=mix(base,vec3(.19,.18,.17),scribble*.16);
+    }
+    base=mix(base,base*vec3(.84,.81,.78),smoothstep(.20,.95,abs(vP.y-.018)*22.0));
   }else{
     // Unknown material: dull non-emissive neutral.
     base=vec3(.20,.19,.16);
@@ -2035,6 +2068,7 @@ void main(){
   if(vM>20.5&&vM<21.5)local=(ambient*1.6)+lampTint*(lm*.40+bloomField*.12);
   if(vM>21.5&&vM<32.5)local=(ambient*1.75)+lampTint*(lm*.44+bloomField*.145);
   if(vM>32.5&&vM<33.5)local=vec3(1.52,1.42,1.02)+lampTint*(lm*.52+bloomField*.28);
+  if(vM>33.5&&vM<34.5)local=(ambient*1.58)+lampTint*(lm*.42+bloomField*.12);
 
   vec3 toP=vP-uCam;float d=length(toP);vec3 dir=normalize(toP);
   float cone=smoothstep(.70,.955,dot(dir,normalize(uFwd)));
@@ -2247,6 +2281,51 @@ function renderPaintedArrows(vp,cam,fwd){
 function quad(a,b,c,d,n,mat,out){
  const pts=[a,b,c,a,c,d];
  for(const p of pts)out.push(p[0],p[1],p[2],n[0],n[1],n[2],mat);
+}
+function quadAuto(a,b,c,d,mat,out){
+  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
+  const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+  const len=Math.hypot(nx,ny,nz)||1;nx/=len;ny/=len;nz/=len;
+  quad(a,b,c,d,[nx,ny,nz],mat,out);
+}
+function addNoteModel(n,out){
+  const w=.23,d=.34,t=.010;
+  const segX=4,segZ=6;
+  const rot=n.rot||0,cs=Math.cos(rot),sn=Math.sin(rot);
+  const seed=(n.variant||0)*6.28318;
+  const place=(x,y,z)=>[n.x+x*cs-z*sn,y,n.z+x*sn+z*cs];
+  function paperHeight(u,v){
+    const edgeX=Math.abs(u-.5)*2.0,edgeZ=Math.abs(v-.5)*2.0;
+    const rimX=Math.max(0.,edgeX-.54),rimZ=Math.max(0.,edgeZ-.60);
+    const curlX=rimX*rimX*.020*(v<.2?1.28:1.0);
+    const curlZ=rimZ*rimZ*.015*(u<.18||u>.82?1.16:1.0);
+    const crown=Math.sin(u*3.14159)*Math.sin(v*3.14159)*.0045;
+    const crumple=(Math.sin(u*11.2+seed)*Math.sin(v*14.4+seed*1.21)+Math.cos(u*17.6-v*8.8+seed*.7))* .0018;
+    return .012 + curlX + curlZ + crown + crumple;
+  }
+  const top=[],bottom=[];
+  for(let iz=0;iz<=segZ;iz++){
+    const v=iz/segZ,rowT=[],rowB=[];
+    for(let ix=0;ix<=segX;ix++){
+      const u=ix/segX,x=(u-.5)*w*2.0,z=(v-.5)*d*2.0,h=paperHeight(u,v);
+      rowT.push(place(x,h+t*.5,z));
+      rowB.push(place(x,h-t*.5,z));
+    }
+    top.push(rowT);bottom.push(rowB);
+  }
+  for(let iz=0;iz<segZ;iz++)for(let ix=0;ix<segX;ix++){
+    quadAuto(top[iz][ix],top[iz][ix+1],top[iz+1][ix+1],top[iz+1][ix],34,out);
+    quadAuto(bottom[iz+1][ix],bottom[iz+1][ix+1],bottom[iz][ix+1],bottom[iz][ix],34,out);
+  }
+  for(let ix=0;ix<segX;ix++){
+    quadAuto(top[0][ix],top[0][ix+1],bottom[0][ix+1],bottom[0][ix],34,out);
+    quadAuto(bottom[segZ][ix],bottom[segZ][ix+1],top[segZ][ix+1],top[segZ][ix],34,out);
+  }
+  for(let iz=0;iz<segZ;iz++){
+    quadAuto(bottom[iz][0],top[iz][0],top[iz+1][0],bottom[iz+1][0],34,out);
+    quadAuto(top[iz][segX],bottom[iz][segX],bottom[iz+1][segX],top[iz+1][segX],34,out);
+  }
 }
 function wallBoxY(x0,y0,z0,x1,y1,z1,out){
   quad([x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[0,0,-1],0,out);
@@ -2798,7 +2877,7 @@ function buildWorld(){
   for(const f of fixtures)fluorescentFixtureModel(f,out);
   // Level 0 cleanup: no stray gray step/frame boxes are rendered.
   for(const d of exitDoors)doorFrameAndVoidModel(d,out);
-  for(const n of noteWorld)if(!n.taken){const ss=.18,y=.012;quad([n.x-ss,y,n.z+ss*.65],[n.x+ss,y,n.z+ss*.65],[n.x+ss,y,n.z-ss*.65],[n.x-ss,y,n.z-ss*.65],[0,1,0],6,out)}
+  for(const n of noteWorld)if(!n.taken)addNoteModel(n,out)
   verts=new Float32Array(out);vertCount=verts.length/7;gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
   const av=new Float32Array(arrowOut);arrowMarkCount=av.length/6;
   gl.bindBuffer(gl.ARRAY_BUFFER,arrowMarkBuffer);gl.bufferData(gl.ARRAY_BUFFER,av,gl.STATIC_DRAW);
@@ -2998,9 +3077,9 @@ function movePlayerToSafeSpawn(preferredX,preferredZ){
 
 const __initialSafeSpawn=findSafeSpawnPosition(SPAWN_X,SPAWN_Z);
 const player={x:__initialSafeSpawn.x,z:__initialSafeSpawn.z,y:1.62,yaw:0,pitch:-.035,crouch:false,sprint:false,flash:false,steps:0,bobPhase:0,bobAmt:0,swayAmt:0,pitCooldown:0,falling:false,fallTime:0,health:100,stamina:100,staminaExhausted:false,staminaRegenDelay:0};
-const jump={footY:0,velocity:0,grounded:true,held:false,buffer:0,holdTime:0,eyeHeight:1.62,landedOnFurniture:false};
+const jump={footY:0,velocity:0,grounded:true,held:false,buffer:0,holdTime:0,eyeHeight:1.62,landedOnFurniture:false,apex:0,airTime:0,lastImpactSpeed:0};
 const JUMP_SPEED=4.68,JUMP_GRAVITY=13.8,JUMP_HOLD_GRAVITY=7.25,JUMP_HOLD_WINDOW=.23;
-function resetJumpState(){jump.footY=0;jump.velocity=0;jump.grounded=true;jump.held=false;jump.buffer=0;jump.holdTime=0;jump.eyeHeight=1.62;jump.landedOnFurniture=false;ui.jump&&ui.jump.classList.remove('pressed');}
+function resetJumpState(){jump.footY=0;jump.velocity=0;jump.grounded=true;jump.held=false;jump.buffer=0;jump.holdTime=0;jump.eyeHeight=1.62;jump.landedOnFurniture=false;jump.apex=0;jump.airTime=0;jump.lastImpactSpeed=0;ui.jump&&ui.jump.classList.remove('pressed');}
 function setJumpPressed(pressed){
  if(pressed){
   if(paused||!started||intro.active||exitSequence.active||journalOpen||player.falling)return;
@@ -3009,6 +3088,19 @@ function setJumpPressed(pressed){
  }else{jump.held=false;ui.jump&&ui.jump.classList.remove('pressed');}
  if(ui.jump)ui.jump.classList.toggle('pressed',jump.held);
 }
+const focusState={held:false,amount:0};
+function setFocusHeld(held){
+ const active=!!held&&!paused&&started&&!journalOpen&&!intro.active&&!exitSequence.active;
+ focusState.held=active;
+ if(ui.focus)ui.focus.classList.toggle('active',active);
+}
+function updateFocus(dt){
+ if(paused||!started||journalOpen||intro.active||exitSequence.active)focusState.held=false;
+ const target=focusState.held?1:0;
+ const speed=focusState.held?2.4:3.8;
+ focusState.amount+=(target-focusState.amount)*Math.min(1,dt*speed);
+ if(ui.focus)ui.focus.classList.toggle('active',focusState.amount>.03);
+}
 
 let joyX=0,joyY=0,keys={},started=false,journalOpen=false,last=performance.now(),worldTime=0,lightLevel=1,hintTimer=0,nearMarker=null,nearExitDoor=null;
 const notesText=[
@@ -3016,7 +3108,22 @@ const notesText=[
  'I marked the same corner three times. The first mark is gone. The second points the wrong way.',
  'If you hear footsteps matching yours, do not test them by stopping.',
  'There was a room here. I slept in it. There is no room here now.',
- 'The carpet is wetter near the walls. I do not want to know why.'
+ 'The carpet is wetter near the walls. I do not want to know why.',
+ 'Follow the rooms where the air is thick with drifting dust. The stillest dark is not always empty.',
+ 'The pits are not the end. Cross the bridgework and keep moving forward. Something changes beyond them.',
+ 'When the floating specks multiply, pay attention. The rooms ahead are usually important.',
+ 'A heavy wooden door exists. I only ever found it after the pit room.',
+ 'The dark rooms hide more than the bright ones. Use the flashlight before you trust a corner.',
+ 'Do not waste your sprint if your breathing turns rough. Wait. It comes back.',
+ 'The notes helped me more than the arrows. Look down once in a while.',
+ 'I found safer paths by checking every room with a dead light. Some of them are trying to tell you where to go.',
+ 'The bridge room hums differently after you cross it. If the air feels heavier, you are on the right trail.',
+ 'I kept circling until I started following the darkest pockets with the most dust. That finally led somewhere.',
+ 'If the carpet sounds wetter under your shoes, slow down and listen. Some rooms are trying to warn you.',
+ 'I left this on the floor because walls cannot be trusted here.',
+ 'Do not ignore the scraps. We only write things down when they matter.',
+ 'The door does not spawn where you expect. The maze rearranges itself behind your confidence.',
+ 'I stopped looking for safe rooms and started looking for signs. Dust. Silence. Then the pit.'
 ];
 let journal=['ENTRY 01\nI woke up on wet carpet beneath fluorescent lights. I cannot remember falling.'];
 function updateJournal(){ui.entries.textContent=journal.join('\n\n— — —\n\n')}
@@ -3308,6 +3415,20 @@ function footstep(far=false,intensity=1,running=false,crouching=false){
   src.start(t,offset,slice);src.stop(t+slice/rate+.10);
  }catch(e){console.warn('WebAudio footstep failed, using fallback:',e);fallbackFootstep(offset,rate,fallbackVol,slice)}
 }
+function playJumpLiftOff(){
+  if(!started||intro.active||player.falling)return;
+  footstep(false,.74,false,player.crouch);
+  noiseBurst(.078,.0105,160,1150,0);
+  softTone(116+Math.random()*14,.034,.058,'triangle',0,.004,effectsBus||master);
+}
+function playLandingThud(drop=0,impact=0){
+  if(!started||intro.active||player.falling)return;
+  const heavy=Math.max(.45,Math.min(1.8,.62+drop*.62+impact*.05));
+  footstep(false,Math.min(1.95,.92+heavy*.42),impact>.8,false);
+  noiseBurst(.12+.05*Math.min(1,drop*.45),.014+.010*heavy,54,920,0);
+  softTone(Math.max(52,92-heavy*17),.044+.014*heavy,.105+.03*Math.min(1,drop),'sine',0,.0035,effectsBus||master);
+  if(drop>.85||impact>5.1)playBodyFallLayer();
+}
 function whisper(){if(!audio)return;const t=audio.currentTime;for(let i=0;i<4;i++){const src=audio.createBufferSource(),bp=audio.createBiquadFilter(),g=audio.createGain();src.buffer=noiseBuffer;bp.type='bandpass';bp.frequency.value=[430,690,1030,1550][i];bp.Q.value=2.6;g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime([.0038,.0045,.0032,.0018][i],t+.35);g.gain.exponentialRampToValueAtTime(.0001,t+2.0+Math.random()*.9);src.connect(bp);bp.connect(g);g.connect(effectsBus||master);src.start(t);src.stop(t+3.0)}}
 function distantThump(){noiseBurst(.24,.014,28,210,0);softTone(39,.18,.008,.01)}
 function hardFloorImpact(){
@@ -3417,6 +3538,13 @@ addEventListener('keyup',e=>{
  // Release movement even if a modifier changed during the press.
  if(e.code==='ShiftLeft'||e.code==='ShiftRight')keys.shift=false;
 });
+document.addEventListener('mousedown',e=>{
+ if(e.button===1){e.preventDefault();setFocusHeld(true);if(started)requestLock();}
+},{passive:false});
+document.addEventListener('mouseup',e=>{if(e.button===1)setFocusHeld(false)});
+document.addEventListener('mouseleave',()=>setFocusHeld(false));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)setFocusHeld(false)});
+canvas.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()},{passive:false});
 if(ui.jump){
  let activeJumpPointer=null,lastTouch=0;
  if(window.PointerEvent){
@@ -3503,16 +3631,30 @@ function interact(){
  }
 }
 ui.use.addEventListener('click',interact);
+if(ui.focus){
+ let activeFocusPointer=null,lastFocusTouch=0;
+ if(window.PointerEvent){
+  ui.focus.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(activeFocusPointer!==null)return;activeFocusPointer=e.pointerId;try{ui.focus.setPointerCapture(e.pointerId)}catch(_){}setFocusHeld(true)},{passive:false});
+  const release=e=>{if(e.pointerId!==activeFocusPointer)return;e.preventDefault();e.stopPropagation();activeFocusPointer=null;setFocusHeld(false)};
+  ui.focus.addEventListener('pointerup',release,{passive:false});ui.focus.addEventListener('pointercancel',release,{passive:false});ui.focus.addEventListener('lostpointercapture',()=>{activeFocusPointer=null;setFocusHeld(false)});
+ }else{
+  ui.focus.addEventListener('touchstart',e=>{lastFocusTouch=performance.now();e.preventDefault();e.stopPropagation();setFocusHeld(true)},{passive:false});
+  const release=e=>{e.preventDefault();e.stopPropagation();setFocusHeld(false)};
+  ui.focus.addEventListener('touchend',release,{passive:false});ui.focus.addEventListener('touchcancel',release,{passive:false});
+  ui.focus.addEventListener('mousedown',e=>{if(performance.now()-lastFocusTouch>500){e.preventDefault();setFocusHeld(true)}});
+  addEventListener('mouseup',()=>setFocusHeld(false));
+ }
+}
 ui.escapeMenu.addEventListener('click',()=>{ui.escapeScreen.style.display='none';resetLevel0State();started=false;window.__lbStarted=false;setIntroHumMuted(false);ui.start.style.display='flex';document.getElementById('controls').style.opacity='1';document.getElementById('hud').style.opacity='1'});
 ui.escapeRestart.addEventListener('click',()=>{ui.escapeScreen.style.display='none';resetLevel0State();started=false;window.__lbStarted=false;setIntroHumMuted(false);beginGame()});
-function toggleJournal(force){setJumpPressed(false);const open=typeof force==='boolean'?force:!journalOpen;if(open)setControlsMenu(false);journalOpen=open;ui.journal.style.display=open?'flex':'none';joyX=joyY=0;ui.knob.style.transform='translate(0,0)';if(open){updateJournal();if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}else if(desktopFine&&shiftLockEnabled)setTimeout(requestLock,30)}
+function toggleJournal(force){setJumpPressed(false);setFocusHeld(false);const open=typeof force==='boolean'?force:!journalOpen;if(open)setControlsMenu(false);journalOpen=open;ui.journal.style.display=open?'flex':'none';joyX=joyY=0;ui.knob.style.transform='translate(0,0)';if(open){updateJournal();if(document.pointerLockElement===canvas&&document.exitPointerLock)document.exitPointerLock()}else if(desktopFine&&shiftLockEnabled)setTimeout(requestLock,30)}
 ui.journalBtn.addEventListener('click',()=>toggleJournal(true));
 ui.closeJournal.addEventListener('click',()=>toggleJournal(false));
 
 let startLocked=false;
 const intro={active:false,t:0,impactPlayed:false};
 function startNoclipIntro(){
-  intro.active=true;intro.t=0;intro.impactPlayed=false;resetJumpState();setIntroHumMuted(true);if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';
+  intro.active=true;intro.t=0;intro.impactPlayed=false;resetJumpState();setFocusHeld(false);setIntroHumMuted(true);if(impactRecoveryShade)impactRecoveryShade.style.opacity='0';
   player.sprint=false;player.crouch=false;player.flash=false;player.steps=0;player.bobAmt=0;player.swayAmt=0;player.health=100;player.stamina=100;player.staminaExhausted=false;player.staminaRegenDelay=0;updateSurvivalHUD(player.health,player.stamina,false);setControlsMenu(false);
   ui.sprint.classList.remove('active');ui.crouch.classList.remove('active');ui.light.classList.remove('active');ui.status.textContent='LIGHT: OFF';
   document.getElementById('controls').style.opacity='0';document.getElementById('hud').style.opacity='0';
@@ -3595,22 +3737,24 @@ function updateJumpPhysics(dt){
  const canStart=jump.grounded&&!player.falling&&!intro.active&&!exitSequence.active;
  jump.buffer=Math.max(0,jump.buffer-dt);
  if(canStart&&jump.buffer>0){
-  jump.grounded=false;jump.velocity=JUMP_SPEED;jump.holdTime=0;jump.buffer=0;
+  jump.grounded=false;jump.velocity=JUMP_SPEED;jump.holdTime=0;jump.buffer=0;jump.apex=jump.footY;jump.airTime=0;jump.lastImpactSpeed=0;
+  playJumpLiftOff();
  }
  if(jump.grounded){
   const footSupport=jumpSupportHeightAt(player.x,player.z,jump.footY-.24,jump.footY+.075);
   const floor=Math.max(0,Math.min(footSupport,H-(player.crouch?1.13:1.62)-.10));
   if(floor>=jump.footY-.085&&floor<=jump.footY+.085){
-   jump.footY=floor;jump.velocity=0;
-  }else{jump.grounded=false;jump.velocity=0;}
+   jump.footY=floor;jump.velocity=0;jump.apex=floor;jump.airTime=0;
+  }else{jump.grounded=false;jump.velocity=0;jump.apex=jump.footY;jump.airTime=0;}
  }
  if(!jump.grounded){
   const previous=jump.footY;
   const boosted=jump.held&&jump.velocity>0&&jump.holdTime<JUMP_HOLD_WINDOW;
-  jump.holdTime+=dt;
+  jump.holdTime+=dt;jump.airTime+=dt;
   const gravity=boosted?JUMP_HOLD_GRAVITY:JUMP_GRAVITY;
   jump.velocity-=gravity*dt;
   let next=previous+jump.velocity*dt;
+  jump.apex=Math.max(jump.apex,next);
   // At full standing height there is only ~1.2m beneath the ceiling.
   const headRoom=H-(player.crouch?1.13:1.62)-.09;
   if(next>headRoom){next=headRoom;jump.velocity=Math.min(0,jump.velocity);}
@@ -3618,10 +3762,18 @@ function updateJumpPhysics(dt){
    const h=jumpSupportHeightAt(player.x,player.z,Math.min(previous,next)-.03,previous+.045);
    const landing=Math.max(0,Math.min(h,headRoom-.01));
    if(next<=landing+.002&&previous>=landing-.05){
-    next=landing;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=landing>.09;
+    const impact=Math.abs(jump.velocity),drop=Math.max(0,jump.apex-landing);
+    next=landing;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=landing>.09;jump.lastImpactSpeed=impact;
+    playLandingThud(drop,impact);
+    jump.apex=landing;jump.airTime=0;
    }
   }
-  if(next<=0){next=0;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=false;}
+  if(next<=0){
+   const impact=Math.abs(jump.velocity),drop=Math.max(0,jump.apex);
+   next=0;jump.velocity=0;jump.grounded=true;jump.landedOnFurniture=false;jump.lastImpactSpeed=impact;
+   playLandingThud(drop,impact);
+   jump.apex=0;jump.airTime=0;
+  }
   jump.footY=next;
  }
  // Smooth eye-height when crouching, without easing vertical jumping motion.
@@ -3692,12 +3844,24 @@ function movement(dt){
  for(const d of exitDoors){const dd=Math.hypot(player.x-d.x,player.z-d.z);if(dd<bestDoor){bestDoor=dd;nearExitDoor=d}}
  ui.use.classList.toggle('active',!!nearMarker||!!nearExitDoor);
  if(nearExitDoor&&hintTimer<=0)showHint('A heavy wooden exit door. Press USE or E to open it.',1.0);
- else if(nearMarker&&hintTimer<=0)showHint('A folded scrap is lying on the carpet.',1.0);
+ else if(nearMarker&&hintTimer<=0)showHint('A curled lined note is lying on the carpet.',1.0);
 }
 
 // Four nearest working fluorescent fixtures are enough for mobile-friendly,
 // physically directional highlights on the furniture's brushed metal.
 const nearbyLightPoints=new Float32Array(12),nearbyLightPowers=new Float32Array(4);
+const DUST_PIT_MAX=6,dustPitRects=new Float32Array(DUST_PIT_MAX*4);
+function selectDustPitRects(x,z){
+  const ranked=[];
+  for(const p of pitQuads){
+    const cx=(p.x0+p.x1)*.5,cz=(p.z0+p.z1)*.5,dx=cx-x,dz=cz-z;
+    ranked.push({d:dx*dx+dz*dz,p});
+  }
+  ranked.sort((a,b)=>a.d-b.d);dustPitRects.fill(0);
+  for(let i=0;i<Math.min(DUST_PIT_MAX,ranked.length);i++){
+    const p=ranked[i].p,o=i*4;dustPitRects[o]=p.x0;dustPitRects[o+1]=p.z0;dustPitRects[o+2]=p.x1;dustPitRects[o+3]=p.z1;
+  }
+}
 function selectNearestFixtureHighlights(x,z){
   const best=[1e20,1e20,1e20,1e20];
   nearbyLightPoints.fill(0);nearbyLightPowers.fill(0);
@@ -3732,7 +3896,7 @@ const dustSeedData=new Float32Array(DUST_COUNT*4);
 const dustVS=`precision mediump float;
 attribute vec4 aDust;
 uniform mat4 uDustVP;uniform vec3 uDustCam;uniform vec3 uDustForward;
-uniform float uDustTime;
+uniform float uDustTime;uniform vec4 uPitRects[6];
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
 varying float vDustFine;varying float vDustVisibility;
 void main(){
@@ -3792,14 +3956,25 @@ void main(){
   vec2 dustCell=floor(vDustWorld.xz/4.5);
   float pocket=fract(sin(dot(dustCell,vec2(91.37,127.19)))*43758.5453);
   float darkness=1.0-smoothstep(.055,.48,fixture);
-  float concentration=mix(.40,1.0,smoothstep(.43,.86,pocket));
+  float concentration=mix(.46,1.0,smoothstep(.43,.86,pocket));
   // Extra fine motes preferentially inhabit dim rooms. Illuminated rooms keep
   // the baseline population; shadow pockets gain the full secondary population.
-  float shadowOnly=step(.59,fract(sin(vDustSeed*318.47+17.3)*47318.1));
-  float shadowPresence=mix(1.0,mix(.12,1.0,darkness),shadowOnly);
-  concentration*=mix(1.0,1.48,darkness)*shadowPresence;
+  float shadowOnly=step(.53,fract(sin(vDustSeed*318.47+17.3)*47318.1));
+  float shadowPresence=mix(1.0,mix(.18,1.0,darkness),shadowOnly);
+  concentration*=mix(1.0,2.18,darkness)*shadowPresence;
+  float pitBoost=0.0;
+  for(int i=0;i<6;i++){
+    vec4 pr=uPitRects[i];
+    if(pr.z>pr.x&&pr.w>pr.y){
+      vec2 q=clamp(vDustWorld.xz,pr.xy,pr.zw);
+      float dist=length(vDustWorld.xz-q);
+      float nearRect=1.0-smoothstep(0.0,3.6,dist);
+      pitBoost=max(pitBoost,nearRect);
+    }
+  }
+  concentration*=mix(1.0,2.45,pitBoost);
   float proximity=1.0-smoothstep(6.0,16.0,vDustDepth);
-  float alpha=(.005+fixture*.095+beam*.25)*visibility*concentration*proximity;
+  float alpha=(.008+darkness*.010+fixture*.090+beam*.29)*visibility*concentration*proximity*(1.0+pitBoost*.24);
   alpha*=(1.0-smoothstep(.18,1.0,r2));
   if(alpha<.00048)discard;
   vec3 tint=mix(vec3(.79,.76,.61),vec3(.91,.91,.85),beam*.8);
@@ -3818,7 +3993,7 @@ try{
     vp:gl.getUniformLocation(program,'uDustVP'),cam:gl.getUniformLocation(program,'uDustCam'),
     fwd:gl.getUniformLocation(program,'uDustForward'),time:gl.getUniformLocation(program,'uDustTime'),
     flash:gl.getUniformLocation(program,'uDustFlash'),lm:gl.getUniformLocation(program,'uDustLightMap'),
-    min:gl.getUniformLocation(program,'uDustMapMin'),size:gl.getUniformLocation(program,'uDustMapSize')
+    min:gl.getUniformLocation(program,'uDustMapMin'),size:gl.getUniformLocation(program,'uDustMapSize'),pits:gl.getUniformLocation(program,'uPitRects')
   };
   dustBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,dustBuffer);
   gl.bufferData(gl.ARRAY_BUFFER,dustSeedData,gl.STATIC_DRAW);
@@ -3836,6 +4011,8 @@ function renderDust(vp,cam,fwd,time){
  gl.uniform1i(dustLoc.lm,3);
  gl.uniform2f(dustLoc.min,dustMapOrigin[0],dustMapOrigin[1]);
  gl.uniform2f(dustLoc.size,dustMapSpan[0],dustMapSpan[1]);
+ selectDustPitRects(cam[0],cam[2]);
+ gl.uniform4fv(dustLoc.pits,dustPitRects);
  gl.bindBuffer(gl.ARRAY_BUFFER,dustBuffer);
  gl.enableVertexAttribArray(dustLoc.pos);
  gl.vertexAttribPointer(dustLoc.pos,4,gl.FLOAT,false,16,0);
@@ -3941,7 +4118,9 @@ function render(t){
  }
  const fwd=[Math.sin(cameraYaw)*Math.cos(pch),Math.sin(pch),Math.cos(cameraYaw)*Math.cos(pch)];
  const up=[Math.sin(cameraRoll)*Math.cos(cameraYaw),Math.cos(cameraRoll),-Math.sin(cameraRoll)*Math.sin(cameraYaw)];
- mat4Perspective(proj,Math.max(.72,Math.min(1.84,settings.fov*Math.PI/180)),canvas.width/canvas.height,.055,155);
+ const baseFov=settings.fov*Math.PI/180;
+ const zoomedFov=baseFov*(1.0-.38*focusState.amount);
+ mat4Perspective(proj,Math.max(.44,Math.min(1.84,zoomedFov)),canvas.width/canvas.height,.055,155);
  mat4Look(view,[eyeX,eyeY,eyeZ],[eyeX+fwd[0],eyeY+fwd[1],eyeZ+fwd[2]],up);mat4Mul(vp,proj,view);
  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(prog);
  gl.uniformMatrix4fv(loc.vp,false,vp);gl.uniform3f(loc.cam,eyeX,eyeY,eyeZ);gl.uniform3f(loc.fwd,fwd[0],fwd[1],fwd[2]);
@@ -3962,7 +4141,7 @@ function render(t){
 function loop(now){
  const raw=(now-last)/1000;last=now;const dt=Math.min(.05,raw);
  if(paused){requestAnimationFrame(loop);return}
- worldTime+=started?dt:0;if(started)updateNoclipIntro(dt);if(started)updateExitSequence(dt);if(started&&!journalOpen)movement(dt);if(!exitSequence.active)director(dt);
+ worldTime+=started?dt:0;if(started)updateNoclipIntro(dt);if(started)updateExitSequence(dt);if(started)updateFocus(dt);if(started&&!journalOpen)movement(dt);if(!exitSequence.active)director(dt);
  lightLevel=1;if(started)updateFixtureHum(false);
  if(hintTimer>0){hintTimer-=dt;if(hintTimer<=0)ui.hint.style.opacity='0'}
  // Frame cap only affects rendering; the simulation keeps real elapsed time.
