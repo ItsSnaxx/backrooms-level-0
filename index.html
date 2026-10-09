@@ -207,7 +207,7 @@
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.27</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.28</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -1790,6 +1790,74 @@ function rebuildActiveWorld(cx,cz,force=false){
 }
 
 let verts=new Float32Array(0),vertCount=0;
+// Deterministic, sparse environmental storytelling props. Geometry is deliberately
+// built in the existing renderer (no external asset requests on mobile Safari).
+function furniturePropModel(type,x,z,angle,out){
+ const c=Math.cos(angle),sn=Math.sin(angle);
+ const pt=(a,y,b)=>[x+a*c-b*sn,y,z+a*sn+b*c];
+ const cube=(ax,ay,az,bx,by,bz,m)=>{
+  const A=pt(ax,ay,az),B=pt(bx,ay,az),C=pt(bx,by,az),D=pt(ax,by,az);
+  const E=pt(ax,ay,bz),F=pt(bx,ay,bz),G=pt(bx,by,bz),I=pt(ax,by,bz);
+  const nx=pt(0,0,-1),nz=pt(0,0,1);
+  quad(A,B,C,D,[sn,0,-c],m,out);quad(F,E,I,G,[-sn,0,c],m,out);
+  quad(E,A,D,I,[-c,0,-sn],m,out);quad(B,F,G,C,[c,0,sn],m,out);
+  quad(D,C,G,I,[0,1,0],m,out);quad(E,F,B,A,[0,-1,0],m,out);
+ };
+ if(type==='vending'){
+  cube(-.53,0,-.38,.53,2.05,.38,9);
+  cube(-.47,.09,-.405,.47,1.94,-.381,8);
+  cube(-.37,.44,-.432,.18,1.60,-.407,7);
+  cube(.24,.86,-.438,.40,1.43,-.413,2);
+  cube(-.26,.20,-.445,.25,.34,-.413,10);
+  cube(-.40,1.72,-.447,.40,1.86,-.410,2);
+ }else if(type==='chair'){
+  cube(-.42,.43,-.42,.42,.54,.42,8);
+  cube(-.42,.48,.30,.42,1.36,.43,8);
+  for(const a of [-.34,.34])for(const b of [-.32,.32])cube(a-.065,0,b-.065,a+.065,.46,b+.065,9);
+  cube(-.35,.53,.325,.35,1.30,.38,9);
+ }else if(type==='table'){
+  cube(-.83,.72,-.52,.83,.82,.52,8);
+  for(const a of [-.69,.69])for(const b of [-.40,.40])cube(a-.07,0,b-.07,a+.07,.73,b+.07,9);
+ }else if(type==='sofa'){
+  cube(-1.05,.22,-.51,1.05,.66,.51,8);
+  cube(-1.05,.57,.27,1.05,1.21,.53,9);
+  cube(-1.10,.25,-.54,-.88,.90,.53,9);
+  cube(.88,.25,-.54,1.10,.90,.53,9);
+  cube(-.89,.63,-.45,-.02,.69,.27,6);cube(.02,.63,-.45,.89,.69,.27,6);
+  for(const a of [-.87,.87])for(const b of [-.37,.37])cube(a-.09,0,b-.09,a+.09,.24,b+.09,9);
+ }
+}
+function addSparseFurniture(out){
+ for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
+  const d=generateChunk(activeChunkX+dx,activeChunkZ+dz);
+  if(d.kind==='grid'||!d.rooms||!d.rooms.length)continue;
+  const r=chunkRng(d.cx+90317,d.cz-61243);
+  // Most chunks remain completely empty; clusters are exceptionally rare.
+  if(r()>.31)continue;
+  const large=d.rooms.filter(a=>a.x1-a.x0>5.2&&a.z1-a.z0>5.2);
+  if(!large.length)continue;
+  const cluster=r()<.045,count=cluster?Math.min(5,large.length+2):r()<.22?2:1;
+  const placed=[];
+  for(let k=0;k<count;k++){
+   const room=large[Math.floor(r()*large.length)],w=room.x1-room.x0,h=room.z1-room.z0;
+   const type=cluster?['chair','chair','table','sofa','chair'][k]:r()<.11?'vending':r()<.55?'chair':r()<.72?'table':'sofa';
+   const radius=type==='sofa'?1.25:type==='table'?1.0:type==='vending'?.75:.62;
+   for(let tries=0;tries<16;tries++){
+    const edge=Math.floor(r()*4),inset=radius+.20;
+    const x=edge===0?room.x0+inset:edge===1?room.x1-inset:room.x0+inset+r()*Math.max(.01,w-2*inset);
+    const z=edge===2?room.z0+inset:edge===3?room.z1-inset:room.z0+inset+r()*Math.max(.01,h-2*inset);
+    if(d.cx===0&&d.cz===0&&Math.hypot(x,z)<5)continue;
+    if(d.walls.some(a=>x>a.x0-radius-.22&&x<a.x1+radius+.22&&z>a.z0-radius-.22&&z<a.z1+radius+.22))continue;
+    if(placed.some(a=>Math.hypot(x-a.x,z-a.z)<radius+a.radius+.4))continue;
+    if(d.pits.some(a=>x>a.x0-2&&x<a.x1+2&&z>a.z0-2&&z<a.z1+2))continue;
+    placed.push({x,z,radius});
+    // A few props appear uncannily tilted or slightly embedded in the wall.
+    furniturePropModel(type,x,z,edge<2?(edge===0?Math.PI/2:-Math.PI/2):(edge===2?0:Math.PI),out);
+    break;
+   }
+  }
+ }
+}
 function buildWorld(){
   const out=[],pad=1.0;
   const floorRect=(x0,z0,x1,z1)=>{ if(x1-x0>.02&&z1-z0>.02) quad([x0,0,z1],[x1,0,z1],[x1,0,z0],[x0,0,z0],[0,1,0],1,out); };
@@ -1839,6 +1907,7 @@ function buildWorld(){
     if(w.invisible)continue;
     const y0=w.y0||0,y1=w.y1||H;wallBoxY(w.x0,y0,w.z0,w.x1,y1,w.z1,out);
   }
+  addSparseFurniture(out);
   for(const a of wallArrows)arrowDecalModel(a,out);
   for(const f of fixtures)fluorescentFixtureModel(f,out);
   // Level 0 cleanup: no stray gray step/frame boxes are rendered.
@@ -2463,7 +2532,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.27';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.28';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -2538,7 +2607,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.27'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.28'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
