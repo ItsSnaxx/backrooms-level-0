@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.40 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.41 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -341,7 +341,7 @@ body.game-paused #grain{animation-play-state:paused}
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -2746,12 +2746,42 @@ function placeClippedChair(refType,wallX,wallZ,wallSide,out){
   const y=targetY-(minHeight+maxHeight)*.5;
   emitFurnitureMesh(mesh,wallX+nx*shift,y,wallZ+nz*shift,yaw,pitch,roll,out,true);
 }
+// Corridor-chair scenes use the very same imported model and collision geometry.
+// Rotations spiral along the wall toward the ceiling, rather than floating in
+// the walking lane or hiding fully inside the wallpaper.
+function placeSpiralingClippedChair(wallX,wallZ,wallSide,stage,r,out){
+  const nx=wallSide===0?1:wallSide===1?-1:0;
+  const nz=wallSide===2?1:wallSide===3?-1:0;
+  const yaw=wallSide===0?Math.PI*.5:wallSide===1?-Math.PI*.5:wallSide===2?0:Math.PI;
+  const pitch=[-.48,.46,-.35][stage%3]+crr(r,-.12,.12);
+  const roll=[-.74,1.44,2.75][stage%3]+crr(r,-.20,.20);
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
+  const r00=cy*cr+sy*sp*sr,r01=-cy*sr+sy*sp*cr,r02=sy*cp;
+  const r10=cp*sr,r11=cp*cr,r12=-sp;
+  const r20=-sy*cr+cy*sp*sr,r21=sy*sr+cy*sp*cr,r22=cy*cp;
+  const mesh=FURNITURE_MESHES.chair;
+  let minDepth=Infinity,maxDepth=-Infinity,minHeight=Infinity,maxHeight=-Infinity;
+  for(let i=0;i<mesh.length;i+=7){
+    const x=mesh[i],y=mesh[i+1],z=mesh[i+2];
+    const xx=x*r00+y*r01+z*r02,yy=x*r10+y*r11+z*r12,zz=x*r20+y*r21+z*r22;
+    const depth=xx*nx+zz*nz;
+    minDepth=Math.min(minDepth,depth);maxDepth=Math.max(maxDepth,depth);
+    minHeight=Math.min(minHeight,yy);maxHeight=Math.max(maxHeight,yy);
+  }
+  const shift=.135-(minDepth+maxDepth)*.5;
+  // Third chair's upper legs disappear into the ceiling by just a few cm.
+  const target=[.88,1.63,2.31][stage%3];
+  let y=target-(minHeight+maxHeight)*.5;
+  if(stage%3===2)y=H+.065-maxHeight;
+  else y=Math.max(.13-minHeight,Math.min(H+.08-maxHeight,y));
+  emitFurnitureMesh(mesh,wallX+nx*shift,y,wallZ+nz*shift,yaw,pitch,roll,out,true);
+}
 // Rare, room-gated furniture piles: actual provided OBJ geometry, rotated, with
 // per-mesh collision and the existing deterministic materials/reflective metal.
 // These props are intentionally entangled like objects that no-clipped together.
 function placeFurniturePile(room,x,z,variant,r,out){
   const roomArea=(room.x1-room.x0)*(room.z1-room.z0);
-  if(roomArea<77)return 0;
+  if(roomArea<(variant==='hallchairs'?33:68))return 0;
   const heading=crr(r,-Math.PI,Math.PI),c=Math.cos(heading),sn=Math.sin(heading);
   let pieces=0;
   function add(type,dx,dz,bottom,yaw=0,pitch=0,roll=0){
@@ -2770,7 +2800,19 @@ function placeFurniturePile(room,x,z,variant,r,out){
     emitFurnitureMesh(mesh,wx,y,wz,spin,pitch,roll,out,false);
     pieces++;
   }
-  if(variant==='chairs'){
+  if(variant==='hallchairs'){
+    // Compact, sideways stack at the far end of a corridor, preserving a full
+    // walking lane beside it. Each piece uses the original detailed chair mesh.
+    const layers=[
+      [-.40,-.40,0,-.65,.08,-.09],[.43,-.40,0,.76,-.10,.14],
+      [-.40,.43,0,2.32,.10,-.06],[.42,.41,0,3.36,-.09,.15],
+      [0,-.27,.52,1.5,.42,.68],[-.20,.22,.72,-.5,-.50,-.85],
+      [.20,-.04,1.12,2.60,.56,1.1],[.0,.12,1.50,-1.3,-.30,-1.25]
+    ];
+    for(const [dx,dz,bottom,yaw,pitch,roll] of layers){
+      add('chair',dx,dz,bottom,yaw+crr(r,-.24,.24),pitch+crr(r,-.08,.08),roll+crr(r,-.12,.12));
+    }
+  }else if(variant==='chairs'){
     // Base: abandoned dining chairs, overlapping in a fairly tight circle.
     for(let i=0;i<6;i++){
       const a=Math.PI*2*i/6,dist=.72+crr(r,-.14,.18);
@@ -2828,6 +2870,21 @@ function addSparseFurniture(out){
     function nearOtherFurniture(x,z,radius){
       return placed.some(a=>Math.hypot(x-a.x,z-a.z)<radius+a.radius+.45);
     }
+    // Ordinary connecting passages are gaps between full-height wall segments.
+    // Do not put a chair directly in front of one just because there is no wall
+    // there to collide with; this protects doorways as well as central paths.
+    function nearRoomOpening(x,z,room,clear){
+      function solidAt(px,pz){
+        return wallRects.some(w=>!w.invisible&&(w.y1??H)>1.8&&
+          px>=w.x0-.17&&px<=w.x1+.17&&pz>=w.z0-.17&&pz<=w.z1+.17);
+      }
+      const offsets=[0,-.43,.43];
+      if(x-room.x0<clear&&offsets.some(q=>z+q>room.z0+.30&&z+q<room.z1-.30&&!solidAt(room.x0,z+q)))return true;
+      if(room.x1-x<clear&&offsets.some(q=>z+q>room.z0+.30&&z+q<room.z1-.30&&!solidAt(room.x1,z+q)))return true;
+      if(z-room.z0<clear&&offsets.some(q=>x+q>room.x0+.30&&x+q<room.x1-.30&&!solidAt(x+q,room.z0)))return true;
+      if(room.z1-z<clear&&offsets.some(q=>x+q>room.x0+.30&&x+q<room.x1-.30&&!solidAt(x+q,room.z1)))return true;
+      return false;
+    }
     // Furnished rooms are occasional. Even when populated, items should read
     // as abandoned in one believable corner, not dumped into a passage.
     let floorCount=0;
@@ -2866,7 +2923,7 @@ function addSparseFurniture(out){
         // Safety screen: preserve the route from the room center to all its
         // boundaries and avoid crowding the center even on irregular geometry.
         if(Math.hypot(x-cx,z-cz)<radius+1.4)continue;
-        placed.push({x,z,radius});
+        placed.push({x,z,radius,type});
         const side=(ix<0?0:1);
         placeFloorFurniture(type,x,z,side,(r()-.5)*.22,out);
         floorCount++;didPlace=true;
@@ -2909,35 +2966,144 @@ function addSparseFurniture(out){
       clips++;
     }
 
-    // Never stack props in the traditional corridors, doorway bottlenecks,
-    // or pit-bridge rooms. Only physically large, accessible landmark chambers.
+    // Large-room piles are now selected by physical floor dimensions, not
+    // exclusively by the very rare 'open' generator style. A chamber with wide
+    // floor space should be eligible even in the pillars/offset/classic layouts.
     const oversized=d.rooms.filter(room=>{
       const w=room.x1-room.x0,h=room.z1-room.z0;
-      return w>=7.65&&h>=7.65&&w*h>=78&&d.style==='open';
+      return w>=7.20&&h>=7.20&&w*h>=69.5;
     });
-    if(!oversized.length||r()>.43)continue;
-    const room=oversized[Math.floor(r()*oversized.length)];
-    const w=room.x1-room.x0,h=room.z1-room.z0;
-    // Offset the pile toward a back corner instead of dumping it in the middle.
-    const mx=(r()<.5?-1:1),mz=(r()<.5?-1:1);
-    const pileX=(room.x0+room.x1)*.5+mx*(w*.5-2.40);
-    const pileZ=(room.z0+room.z1)*.5+mz*(h*.5-2.40);
-    // Require enough genuinely empty floor space for the full 3-D footprint.
-    const radius=1.84;
-    if(d.cx===0&&d.cz===0&&Math.hypot(pileX,pileZ)<7)continue;
-    if(nearWall(pileX,pileZ,radius)||nearDoorOrPit(pileX,pileZ,2.2)||nearOtherFurniture(pileX,pileZ,radius))continue;
-    if(Math.hypot(pileX-(room.x0+room.x1)*.5,pileZ-(room.z0+room.z1)*.5)<2.15)continue;
-    // Chair-only piles belong to chunks already featuring a no-clipped chair.
-    // A couple of nearby floor chairs complete the uncanny arrangement.
-    const chairPile=clips>0&&r()<.53;
-    placed.push({x:pileX,z:pileZ,radius:1.95,type:'pile'});
-    placeFurniturePile(room,pileX,pileZ,chairPile?'chairs':'mixed',r,out);
-    if(chairPile){
-      for(const a of [1.15,-1.15]){
-        const px=pileX+a,pz=pileZ+(mz<0?2.1:-2.1);
-        if(px<room.x0+.75||px>room.x1-.75||pz<room.z0+.75||pz>room.z1-.75)continue;
-        if(nearWall(px,pz,.42)||nearDoorOrPit(px,pz,.6))continue;
-        emitFurnitureMesh(FURNITURE_MESHES.chair,px,0,pz,crr(r,-Math.PI,Math.PI),0,0,out,false);
+    const pileRooms=oversized.slice();
+    for(let i=pileRooms.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[pileRooms[i],pileRooms[j]]=[pileRooms[j],pileRooms[i]];}
+    const maxPiles=d.style==='open'?(pileRooms.length>=5?3:2):d.style==='pillars'?2:1;
+    let totalPiles=0;
+    function validPileSpot(x,z,room){
+      const cx=(room.x0+room.x1)*.5,cz=(room.z0+room.z1)*.5;
+      if(d.cx===0&&d.cz===0&&Math.hypot(x,z)<7.0)return false;
+      if(nearWall(x,z,1.50)||nearDoorOrPit(x,z,1.92)||nearRoomOpening(x,z,room,1.68)||nearOtherFurniture(x,z,1.70))return false;
+      // A continuous central walking channel remains open between exits.
+      if(Math.hypot(x-cx,z-cz)<2.42)return false;
+      return true;
+    }
+    function planSideChairs(x,z,room){
+      const candidates=[];
+      const rcx=(room.x0+room.x1)*.5,rcz=(room.z0+room.z1)*.5;
+      for(const a of [0,Math.PI*.5,Math.PI,Math.PI*1.5,.73,2.28,3.85,5.43]){
+        const sx=x+Math.cos(a)*2.85,sz=z+Math.sin(a)*2.85;
+        if(sx<room.x0+.75||sx>room.x1-.75||sz<room.z0+.75||sz>room.z1-.75)continue;
+        if(Math.hypot(sx-rcx,sz-rcz)<1.32)continue;
+        if(nearWall(sx,sz,.40)||nearDoorOrPit(sx,sz,.70)||nearRoomOpening(sx,sz,room,1.08)||nearOtherFurniture(sx,sz,.58))continue;
+        if(candidates.some(p=>Math.hypot(sx-p.x,sz-p.z)<1.15))continue;
+        candidates.push({x:sx,z:sz});
+      }
+      return candidates.slice(0,3);
+    }
+    for(const room of pileRooms){
+      if(totalPiles>=maxPiles)break;
+      const area=(room.x1-room.x0)*(room.z1-room.z0);
+      const chance=Math.min(.97,(d.style==='open'?.91:d.style==='pillars'?.79:.64)+(area>104?.055:0));
+      if(r()>chance)continue;
+      const corners=[0,1,2,3];
+      for(let i=corners.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[corners[i],corners[j]]=[corners[j],corners[i]];}
+      let spawnX=null,spawnZ=null;
+      // Try multiple positions instead of rejecting the entire room after one
+      // blocked corner. All positions stay within the room and off its centerline.
+      for(const corner of corners){
+        const sx=(corner===0||corner===2)?-1:1;
+        const sz=(corner===0||corner===1)?-1:1;
+        for(const inset of [1.96,2.18,1.82]){
+          const px=sx<0?room.x0+inset:room.x1-inset;
+          const pz=sz<0?room.z0+inset:room.z1-inset;
+          if(!validPileSpot(px,pz,room))continue;
+          spawnX=px;spawnZ=pz;break;
+        }
+        if(spawnX!==null)break;
+      }
+      if(spawnX===null)continue;
+      const hasChair=placed.some(a=>(a.type==='chair'||a.type==='wall-chair')&&Math.hypot(spawnX-a.x,spawnZ-a.z)<7.0);
+      const supportSpots=planSideChairs(spawnX,spawnZ,room);
+      // Chair-only piles NEVER spawn in isolation: they require neighboring
+      // upright or embedded chairs, existing or spawned as part of the scene.
+      const chairPile=(hasChair||supportSpots.length>0)&&r()<(hasChair?.74:.60);
+      if(chairPile&&supportSpots.length){
+        let companions=hasChair?1:Math.min(2,supportSpots.length);
+        for(const q of supportSpots){
+          if(companions--<=0)break;
+          placed.push({x:q.x,z:q.z,radius:.49,type:'chair'});
+          placeFloorFurniture('chair',q.x,q.z,Math.floor(r()*4),crr(r,-.30,.30),out);
+        }
+      }
+      placed.push({x:spawnX,z:spawnZ,radius:1.80,type:'pile'});
+      placeFurniturePile(room,spawnX,spawnZ,chairPile?'chairs':'mixed',r,out);
+      totalPiles++;
+    }
+
+    // Hallway-end chair tableaux. Smaller than the massive room piles, but
+    // unmistakably stacked, with a thin trail of upright chairs down one wall.
+    // The opposite side stays navigable. A few chairs appear no-clipped into
+    // the wall, twisting upward, sometimes intersecting the ceiling.
+    if(d.style==='corridor'&&r()<.42){
+      const hallways=d.rooms.filter(room=>{
+        const w=room.x1-room.x0,h=room.z1-room.z0;
+        return Math.max(w,h)>=8.0&&Math.min(w,h)>=3.72&&w*h>=33.0;
+      });
+      for(let i=hallways.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[hallways[i],hallways[j]]=[hallways[j],hallways[i]];}
+      for(const hall of hallways){
+        const w=hall.x1-hall.x0,h=hall.z1-hall.z0,alongZ=h>=w;
+        const ends=[0,1,2,3];
+        for(let i=ends.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[ends[i],ends[j]]=[ends[j],ends[i]];}
+        let endScene=null;
+        for(const end of ends){
+          const lowEnd=end<2,leftWall=end%2===0;
+          const px=alongZ?(leftWall?hall.x0+1.11:hall.x1-1.11):(lowEnd?hall.x0+1.53:hall.x1-1.53);
+          const pz=alongZ?(lowEnd?hall.z0+1.53:hall.z1-1.53):(leftWall?hall.z0+1.11:hall.z1-1.11);
+          if(d.cx===0&&d.cz===0&&Math.hypot(px,pz)<7)continue;
+          // Only choose a genuine intact end wall, never a doorway.
+          const endCoord=alongZ?(lowEnd?hall.z0:hall.z1):(lowEnd?hall.x0:hall.x1);
+          const endIsWall=d.walls.some(a=>{
+            if(a.invisible||a.door||(a.y1??H)<2.3)return false;
+            if(alongZ)return a.z0<endCoord+.32&&a.z1>endCoord-.32&&a.x0<px-.55&&a.x1>px+.55;
+            return a.x0<endCoord+.32&&a.x1>endCoord-.32&&a.z0<pz-.55&&a.z1>pz+.55;
+          });
+          if(!endIsWall)continue;
+          if(nearWall(px,pz,.58)||nearDoorOrPit(px,pz,1.15)||nearRoomOpening(px,pz,hall,1.32)||nearOtherFurniture(px,pz,1.15))continue;
+          endScene={px,pz,lowEnd,leftWall};break;
+        }
+        if(!endScene)continue;
+        const {px,pz,lowEnd,leftWall}=endScene;
+        placed.push({x:px,z:pz,radius:1.22,type:'chair-pile'});
+        placeFurniturePile(hall,px,pz,'hallchairs',r,out);
+        const travelSign=lowEnd?1:-1;
+        // Scattered abandoned chairs lead toward the pile along the edge.
+        for(const dist of [2.9,4.25,5.65]){
+          const x=alongZ?px+crr(r,-.10,.10):px+travelSign*dist;
+          const z=alongZ?pz+travelSign*dist:pz+crr(r,-.10,.10);
+          if(x<hall.x0+.56||x>hall.x1-.56||z<hall.z0+.56||z>hall.z1-.56)continue;
+          if(nearWall(x,z,.43)||nearDoorOrPit(x,z,.6)||nearRoomOpening(x,z,hall,1.30)||nearOtherFurniture(x,z,.49))continue;
+          placed.push({x,z,radius:.49,type:'chair'});
+          placeFloorFurniture('chair',x,z,Math.floor(r()*4),crr(r,-.42,.42),out);
+        }
+        // Follow the side wall progressively upward. The highest model is
+        // gently swallowed by the ceiling, like a literal no-clip accident.
+        for(let stage=0;stage<3;stage++){
+          const dist=2.00+stage*1.55;
+          const wx=alongZ?(leftWall?hall.x0:hall.x1):px+travelSign*dist;
+          const wz=alongZ?pz+travelSign*dist:(leftWall?hall.z0:hall.z1);
+          const side=alongZ?(leftWall?0:1):(leftWall?2:3);
+          const nx=side===0?1:side===1?-1:0,nz=side===2?1:side===3?-1:0;
+          const probeX=wx+nx*.64,probeZ=wz+nz*.64;
+          const wall=d.walls.find(a=>{
+            if(a.invisible||a.door||a.crawl||a.halfWall||(a.y1??H)<2.35)return false;
+            const isV=(a.x1-a.x0)<.46,isH=(a.z1-a.z0)<.46;
+            if(alongZ)return isV&&wx>a.x0-.28&&wx<a.x1+.28&&wz>a.z0+.86&&wz<a.z1-.86;
+            return isH&&wz>a.z0-.28&&wz<a.z1+.28&&wx>a.x0+.86&&wx<a.x1-.86;
+          });
+          if(!wall||nearDoorOrPit(probeX,probeZ,.49)||nearWall(probeX,probeZ,.23,wall))continue;
+          if(!d.rooms.some(q=>probeX>q.x0+.10&&probeX<q.x1-.10&&probeZ>q.z0+.10&&probeZ<q.z1-.10))continue;
+          placed.push({x:probeX,z:probeZ,radius:.35,type:'wall-chair'});
+          placeSpiralingClippedChair(wx,wz,side,stage,r,out);
+        }
+        break; // Only one such end-of-hall arrangement per corridor chunk.
       }
     }
   }
@@ -3720,7 +3886,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -3810,7 +3976,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92*settings.cinematics/100*settings.master/100;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
