@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.39 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.40 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -341,7 +341,7 @@ body.game-paused #grain{animation-play-state:paused}
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -1765,6 +1765,7 @@ uniform sampler2D uWallTex;uniform sampler2D uCeilTex;uniform sampler2D uFloorTe
 uniform vec2 uMapMin;uniform vec2 uMapSize;
 uniform vec3 uNearbyFixture[4];
 uniform float uFixtureStrength[4];
+uniform vec4 uFlickerLights[12];
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
 float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
 
@@ -1928,8 +1929,8 @@ void main(){
     base=mix(vec3(lum),base,.42);
     base*=vec3(.64,.62,.52)*(.84+.12*n2(vP.xz*.15));
   }else if(vM<3.5){
-    // Static warm fluorescent panel. No camera-position or cell-dependent brightness.
-    base=vec3(1.44,1.38,1.02);
+    // Consistent neutral-white fluorescent glass (all functioning fixtures).
+    base=vec3(1.35,1.42,1.46);
   }else if(vM<4.5){
     // Static dark fixture housing; nearby illumination comes from the persistent light field.
     base=vec3(.105,.102,.083);
@@ -1962,7 +1963,7 @@ void main(){
     // Yellowed office-fixture casing. Slight tonal noise keeps the metal from
     // reading as a flat game-color block.
     float metal=.90+.10*n2(vP.xz*2.7+vP.y*2.1);
-    base=vec3(.20,.175,.105)*metal;
+    base=vec3(.19,.195,.19)*metal;
   }else if(vM<12.5){
     // Non-emissive bulb glass / sockets for dead fixtures.
     float dirt=.90+.10*n2(vP.xz*5.4+vP.y*3.2);
@@ -1983,8 +1984,8 @@ void main(){
     float paint=.86+.14*n2(vec2((vP.x+vP.z)*9.0,vP.y*7.0));
     base=vec3(.016,.014,.010)*paint;
   }else if(vM<17.5){
-    // Weak fluorescent tube: visibly powered, but tired and yellowed.
-    base=vec3(.82,.77,.54);
+    // Legacy weak-glass ID: never warm or orange. New fixtures use standard glass.
+    base=vec3(.85,.90,.94);
   }else if(vM<18.5){
     base=woodFinish(vP,vN,0.12);
   }else if(vM<19.5){
@@ -2021,11 +2022,10 @@ void main(){
   }else if(vM<32.5){
     base=woodFinish(vP,vN,.56)*vec3(.90,.68,.53);
   }else if(vM>32.5&&vM<33.5){
-    // Reserved fluorescent-glass ID 33; NEVER share it with furniture.
-    float seed=hash(floor(vP.xz/4.0)+vec2(23.7,6.1));
-    float tick=floor(uTime*(7.0+seed*5.0));
-    float flick=mix(.30,1.0,smoothstep(.22,.72,hash(vec2(tick,seed*91.0))));
-    base=vec3(1.32,1.25,.88)*flick;
+    // Flicker glass is either white and emissive or completely switched off.
+    float tubeOn=0.0;
+    for(int i=0;i<12;i++){vec4 fl=uFlickerLights[i];if(fl.w>.5&&distance(vP.xz,fl.xy)<.85)tubeOn=max(tubeOn,fl.z);}
+    base=mix(vec3(.20,.22,.23),vec3(1.35,1.42,1.46),tubeOn);
   }else if(vM>33.5&&vM<34.5){
     vec3 nrm=normalize(vN);
     float grain=n2(vP.xz*18.0+vP.y*31.0);
@@ -2050,18 +2050,29 @@ void main(){
   // The lightmap has a very dark storage floor. Remove that floor before using
   // it so unlit geometry stays genuinely dark rather than receiving a fake fill.
   float lm=pow(clamp((lmRaw-.027)/.973,0.0,1.0),.84);
+  // Real-time light spills from currently ON flickering fixtures only.
+  // Flickering fixtures are completely absent from the persistent lightmap.
+  float flickerFlux=0.0;
+  for(int i=0;i<12;i++){
+    vec4 fl=uFlickerLights[i];
+    if(fl.w>.5&&fl.z>.5){
+      float dist=distance(vP.xz,fl.xy);
+      flickerFlux+=fl.z*(.54*(1.0-smoothstep(.25,5.1,dist))+.115*(1.0-smoothstep(1.5,8.6,dist)));
+    }
+  }
+  lm=clamp(lm+flickerFlux,0.0,1.0);
   float nd=.64+.36*max(0.,dot(normalize(vN),normalize(vec3(.10,.98,.12))));
   // A gentle fluorescent/indirect baseline keeps ordinary Level 0 navigable even
   // between fixtures. The actual pools and room-to-room spill still come from the
   // persistent lightmap, so failed lights remain meaningful.
   vec3 ambient=vec3(.0205,.0198,.0158);
-  vec3 lampTint=vec3(.99,.95,.74);
+  vec3 lampTint=vec3(.965,.987,1.0);
   vec3 local=(ambient + lampTint*(lm*.86))*mix(.62,.96,nd);
   float bloomField=pow(clamp(lm,0.0,1.0),1.22);
   if(vM<.5)local+=lampTint*bloomField*.11;
   if(vM>0.5&&vM<1.5)local+=lampTint*bloomField*.17;
   if(vM>1.5&&vM<2.5)local+=lampTint*bloomField*.25;
-  if(vM>2.5&&vM<3.5)local=vec3(2.55,2.40,1.72)+lampTint*bloomField*.42;
+  if(vM>2.5&&vM<3.5)local=vec3(2.35,2.45,2.52)+lampTint*bloomField*.42;
   if(vM>3.5&&vM<4.5)local=vec3(.085,.080,.061)+lampTint*(lm*.12+bloomField*.10);
   if(vM>4.5&&vM<5.5)local*=.80;
   if(vM>8.5&&vM<9.5){float depth=clamp((vP.y+6.8)/6.8,0.,1.);local*=mix(.025,.52,depth);}
@@ -2070,13 +2081,17 @@ void main(){
   if(vM>11.5&&vM<12.5)local=vec3(.0045,.0043,.0038);
   if(vM>12.5&&vM<15.5)local=vec3(.004,.004,.0035);
   if(vM>15.5&&vM<16.5)local=vec3(.12,.115,.09)+lampTint*(lm*.62+bloomField*.16);
-  if(vM>16.5&&vM<17.5)local=vec3(.88,.82,.60)+lampTint*(lm*.36+bloomField*.18);
+  if(vM>16.5&&vM<17.5)local=vec3(.78,.83,.88)+lampTint*(lm*.36+bloomField*.18);
   if(vM>17.5&&vM<18.5)local=(ambient*1.7)+lampTint*(lm*.42+bloomField*.14);
   if(vM>18.5&&vM<19.5)local=(ambient*1.85)+lampTint*(lm*.46+bloomField*.15);
   if(vM>19.5&&vM<20.5)local=(ambient*1.85)+lampTint*(lm*.44+bloomField*.14);
   if(vM>20.5&&vM<21.5)local=(ambient*1.6)+lampTint*(lm*.40+bloomField*.12);
   if(vM>21.5&&vM<32.5)local=(ambient*1.75)+lampTint*(lm*.44+bloomField*.145);
-  if(vM>32.5&&vM<33.5)local=vec3(1.52,1.42,1.02)+lampTint*(lm*.52+bloomField*.28);
+  if(vM>32.5&&vM<33.5){
+    float tubeOn=0.0;
+    for(int i=0;i<12;i++){vec4 fl=uFlickerLights[i];if(fl.w>.5&&distance(vP.xz,fl.xy)<.85)tubeOn=max(tubeOn,fl.z);}
+    local=mix(vec3(.016,.018,.020),vec3(2.32,2.45,2.53)+lampTint*(lm*.48+bloomField*.28),tubeOn);
+  }
   if(vM>33.5&&vM<34.5)local=(ambient*1.58)+lampTint*(lm*.42+bloomField*.12);
 
   vec3 toP=vP-uCam;float d=length(toP);vec3 dir=normalize(toP);
@@ -2084,7 +2099,7 @@ void main(){
   float flashRange=1.0-smoothstep(7.5,14.0,d);
   float beam=uFlash*cone*flashRange*(.92/(1.0+.145*d*d));
 
-  vec3 col=base*(local+vec3(beam*1.05,beam,beam*.72));
+  vec3 col=base*(local+vec3(beam*1.00,beam*1.01,beam*1.02));
   // Energy-conserving-ish direct specular response for thin brushed metal.
   // Each lobe corresponds to an actual, enabled fluorescent fixture nearest
   // the camera; reflective light cannot come from an unlit/failing fixture.
@@ -2110,7 +2125,7 @@ void main(){
         float broad=pow(max(dot(n,halfDir),0.0),24.0);
         float tight=pow(max(dot(n,halfDir),0.0),82.0);
         float attenuation=1.0/(1.0+dist2*.19);
-        fixtureSpec+=vec3(1.0,.96,.78)*(broad*.90+tight*1.35)*facing*strength*attenuation;
+        fixtureSpec+=vec3(.97,.985,1.0)*(broad*.90+tight*1.35)*facing*strength*attenuation;
       }
     }
     // Brightest when the flashlight is on and directly angled onto a surface.
@@ -2123,7 +2138,12 @@ void main(){
     // Working tubes are strongly emissive at every distance; this is visual
     // overexposure of the bulb itself, not a camera-proximity light source.
     float glare=smoothstep(.08,.88,dot(dir,normalize(uFwd)))*.30;
-    col+=vec3(1.22,1.13,.80)*glare;
+    col+=vec3(1.18,1.24,1.28)*glare;
+  }
+  if(vM>32.5&&vM<33.5){
+    float tubeOn=0.0;
+    for(int i=0;i<12;i++){vec4 fl=uFlickerLights[i];if(fl.w>.5&&distance(vP.xz,fl.xy)<.85)tubeOn=max(tubeOn,fl.z);}
+    col+=vec3(.97,1.00,1.03)*tubeOn*.48;
   }
   // Distance haze is subtle nearby and only becomes strong through several rooms.
   // It darkens progressively instead of snapping architecture into blackness.
@@ -2164,7 +2184,7 @@ const loc={
  flash:gl.getUniformLocation(prog,'uFlash'),light:gl.getUniformLocation(prog,'uLight'),time:gl.getUniformLocation(prog,'uTime'),fogControl:gl.getUniformLocation(prog,'uFogControl'),brightness:gl.getUniformLocation(prog,'uBrightness'),filmGrain:gl.getUniformLocation(prog,'uFilmGrain'),
  wallTex:gl.getUniformLocation(prog,'uWallTex'),ceilTex:gl.getUniformLocation(prog,'uCeilTex'),floorTex:gl.getUniformLocation(prog,'uFloorTex'),woodTex:gl.getUniformLocation(prog,'uWoodTex'),fabricTexA:gl.getUniformLocation(prog,'uFabricTexA'),fabricTexB:gl.getUniformLocation(prog,'uFabricTexB'),
  lightMap:gl.getUniformLocation(prog,'uLightMap'),mapMin:gl.getUniformLocation(prog,'uMapMin'),mapSize:gl.getUniformLocation(prog,'uMapSize'),
- nearbyFixture:gl.getUniformLocation(prog,'uNearbyFixture[0]'),fixtureStrength:gl.getUniformLocation(prog,'uFixtureStrength[0]')
+ nearbyFixture:gl.getUniformLocation(prog,'uNearbyFixture[0]'),fixtureStrength:gl.getUniformLocation(prog,'uFixtureStrength[0]'),flickers:gl.getUniformLocation(prog,'uFlickerLights[0]')
 };
 const buf=gl.createBuffer(),doorBuf=gl.createBuffer();
 const STRIDE=7*4;
@@ -2423,7 +2443,7 @@ function doorDynamicModel(d,out,openAmount=0){
 }
 function fluorescentFixtureModel(f,out){
   const dead=!!f.dead,mode=f.mode||(dead?'dead':'normal'),axis=f.axis==='z'?'z':'x';
-  const casingMat=11, bulbMat=dead?12:(mode==='weak'?17:(mode==='flicker'?33:3)), socketMat=4;
+  const casingMat=11, bulbMat=dead?12:(mode==='flicker'?33:3), socketMat=4;
   if(axis==='x'){
     boxMat(f.x-.74,H-.095,f.z-.245,f.x+.74,H-.012,f.z+.245,casingMat,out);
     solidBoxMat(f.x-.70,H-.071,f.z-.058,f.x+.70,H-.050,f.z+.058,casingMat,out);
@@ -2726,6 +2746,64 @@ function placeClippedChair(refType,wallX,wallZ,wallSide,out){
   const y=targetY-(minHeight+maxHeight)*.5;
   emitFurnitureMesh(mesh,wallX+nx*shift,y,wallZ+nz*shift,yaw,pitch,roll,out,true);
 }
+// Rare, room-gated furniture piles: actual provided OBJ geometry, rotated, with
+// per-mesh collision and the existing deterministic materials/reflective metal.
+// These props are intentionally entangled like objects that no-clipped together.
+function placeFurniturePile(room,x,z,variant,r,out){
+  const roomArea=(room.x1-room.x0)*(room.z1-room.z0);
+  if(roomArea<77)return 0;
+  const heading=crr(r,-Math.PI,Math.PI),c=Math.cos(heading),sn=Math.sin(heading);
+  let pieces=0;
+  function add(type,dx,dz,bottom,yaw=0,pitch=0,roll=0){
+    const mesh=type==='chair'?FURNITURE_MESHES.chair:type==='sofa'?FURNITURE_MESHES.sofa:(r()<.5?FURNITURE_MESHES.table:FURNITURE_MESHES.tableAlt);
+    const spin=heading+yaw, cy=Math.cos(spin),sy=Math.sin(spin),cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
+    const r10=cp*sr,r11=cp*cr,r12=-sp;
+    let bottomY=Infinity,topY=-Infinity;
+    for(let i=0;i<mesh.length;i+=7){
+      const yy=mesh[i]*r10+mesh[i+1]*r11+mesh[i+2]*r12;
+      if(yy<bottomY)bottomY=yy;if(yy>topY)topY=yy;
+    }
+    // Ceiling clearance applies to every vertex, including tilted chair legs.
+    const floorY=Math.max(0,Math.min(bottom,H-.15-(topY-bottomY)));
+    const y=floorY-bottomY;
+    const wx=x+dx*c-dz*sn,wz=z+dx*sn+dz*c;
+    emitFurnitureMesh(mesh,wx,y,wz,spin,pitch,roll,out,false);
+    pieces++;
+  }
+  if(variant==='chairs'){
+    // Base: abandoned dining chairs, overlapping in a fairly tight circle.
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2*i/6,dist=.72+crr(r,-.14,.18);
+      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,0,a+Math.PI*.52+crr(r,-.24,.24),crr(r,-.10,.12),crr(r,-.09,.10));
+    }
+    // Several seats jammed sideways into the chairs beneath them.
+    for(let i=0;i<6;i++){
+      const a=Math.PI*2*(i+.32)/6,dist=.42+crr(r,-.06,.24);
+      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,.55+crr(r,-.09,.18),a+crr(r,-.9,.9),crr(r,-.48,.46),crr(r,-.72,.74));
+    }
+    // Distinct tilted silhouettes crown the pile, high but beneath the ceiling.
+    for(let i=0;i<3;i++){
+      const a=Math.PI*2*(i+.14)/3;
+      add('chair',Math.cos(a)*.30,Math.sin(a)*.30,1.35+crr(r,-.10,.13),a+crr(r,-.8,.8),crr(r,-.42,.48),crr(r,-.92,.94));
+    }
+  }else{
+    // Mixed pile: a sofa/tables form the weight-bearing bottom layers.
+    add('sofa',-.48,-.34,0,.18+crr(r,-.20,.20),0,0);
+    add('table',.81,.45,0,Math.PI*.4+crr(r,-.18,.18),.05,crr(r,-.12,.12));
+    add('chair',-.85,.62,0,.8+crr(r,-.22,.22),crr(r,-.10,.12),.09);
+    add('chair',.95,-.79,0,2.6+crr(r,-.2,.2),.1,-.12);
+    add('sofa',.12,.09,.48,-.48,crr(r,-.12,.12),crr(r,-.22,.18));
+    add('table',-.48,.61,.88,1.2,crr(r,-.39,.42),crr(r,-.54,.58));
+    for(let i=0;i<4;i++){
+      const a=Math.PI*2*(i+.23)/4,dist=.56+crr(r,-.12,.19);
+      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,.85+crr(r,-.15,.18),a+Math.PI*.6,crr(r,-.55,.52),crr(r,-.72,.72));
+    }
+    for(let i=0;i<2;i++){
+      add('chair',crr(r,-.24,.24),crr(r,-.3,.3),1.40+crr(r,-.12,.1),crr(r,-1.1,1.1),crr(r,-.33,.44),crr(r,-.90,.90));
+    }
+  }
+  return pieces;
+}
 function addSparseFurniture(out){
   furnitureColliders.length=0;furnitureCollisionGrid.clear();
   for(let dz=-ACTIVE_R;dz<=ACTIVE_R;dz++)for(let dx=-ACTIVE_R;dx<=ACTIVE_R;dx++){
@@ -2825,10 +2903,42 @@ function addSparseFurniture(out){
       // Leave the area beside corners and connecting passages clear.
       if(d.walls.some(a=>a!==wall&&!a.invisible&&
         circleAABB(probeX,probeZ,.68,a.x0,a.z0,a.x1,a.z1)))continue;
-      placed.push({x:probeX,z:probeZ,radius:.55});
+      placed.push({x:probeX,z:probeZ,radius:.55,type:'wall-chair'});
       const refType=(clips+Math.floor(r()*4))%4;
       placeClippedChair(refType,wx,wz,side,out);
       clips++;
+    }
+
+    // Never stack props in the traditional corridors, doorway bottlenecks,
+    // or pit-bridge rooms. Only physically large, accessible landmark chambers.
+    const oversized=d.rooms.filter(room=>{
+      const w=room.x1-room.x0,h=room.z1-room.z0;
+      return w>=7.65&&h>=7.65&&w*h>=78&&d.style==='open';
+    });
+    if(!oversized.length||r()>.43)continue;
+    const room=oversized[Math.floor(r()*oversized.length)];
+    const w=room.x1-room.x0,h=room.z1-room.z0;
+    // Offset the pile toward a back corner instead of dumping it in the middle.
+    const mx=(r()<.5?-1:1),mz=(r()<.5?-1:1);
+    const pileX=(room.x0+room.x1)*.5+mx*(w*.5-2.40);
+    const pileZ=(room.z0+room.z1)*.5+mz*(h*.5-2.40);
+    // Require enough genuinely empty floor space for the full 3-D footprint.
+    const radius=1.84;
+    if(d.cx===0&&d.cz===0&&Math.hypot(pileX,pileZ)<7)continue;
+    if(nearWall(pileX,pileZ,radius)||nearDoorOrPit(pileX,pileZ,2.2)||nearOtherFurniture(pileX,pileZ,radius))continue;
+    if(Math.hypot(pileX-(room.x0+room.x1)*.5,pileZ-(room.z0+room.z1)*.5)<2.15)continue;
+    // Chair-only piles belong to chunks already featuring a no-clipped chair.
+    // A couple of nearby floor chairs complete the uncanny arrangement.
+    const chairPile=clips>0&&r()<.53;
+    placed.push({x:pileX,z:pileZ,radius:1.95,type:'pile'});
+    placeFurniturePile(room,pileX,pileZ,chairPile?'chairs':'mixed',r,out);
+    if(chairPile){
+      for(const a of [1.15,-1.15]){
+        const px=pileX+a,pz=pileZ+(mz<0?2.1:-2.1);
+        if(px<room.x0+.75||px>room.x1-.75||pz<room.z0+.75||pz>room.z1-.75)continue;
+        if(nearWall(px,pz,.42)||nearDoorOrPit(px,pz,.6))continue;
+        emitFurnitureMesh(FURNITURE_MESHES.chair,px,0,pz,crr(r,-Math.PI,Math.PI),0,0,out,false);
+      }
     }
   }
 }
@@ -2934,26 +3044,27 @@ function uploadGeneratedLightMap(){
   const rgba=(r,g,b,a)=>`rgba(${r},${g},${b},${Math.max(0,Math.min(1,a))})`;
 
   for(const f of lightFixtures){
+    if(f.mode==='flicker')continue; // An off tube must not illuminate the persistent map.
     const x=(f.x-lightMinX)*LIGHT_PPW,y=(f.z-lightMinZ)*LIGHT_PPW;
-    const strength=f.mode==='weak'?.48:(f.mode==='flicker'?.72:1.0);
+    const strength=f.mode==='weak'?.48:1.0;
     stampSoftPool(lg,x,y,3.15*LIGHT_PPW,[
-      [0,rgba(255,252,236,.37*strength)],
-      [.26,rgba(246,237,200,.245*strength)],
-      [.64,rgba(188,178,132,.095*strength)],
+      [0,rgba(247,250,255,.37*strength)],
+      [.26,rgba(225,236,245,.245*strength)],
+      [.64,rgba(171,184,195,.095*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
     stampSoftPool(lg,x,y,5.75*LIGHT_PPW,[
-      [0,rgba(220,211,165,.135*strength)],
-      [.30,rgba(174,166,124,.086*strength)],
-      [.64,rgba(108,106,78,.037*strength)],
+      [0,rgba(207,221,231,.135*strength)],
+      [.30,rgba(163,176,188,.086*strength)],
+      [.64,rgba(113,123,133,.037*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
     // A softer outer spill lets bright rooms bleed into connected hallways without
     // making every adjacent room share the same exposure.
     stampSoftPool(lg,x,y,9.25*LIGHT_PPW,[
-      [0,rgba(132,127,94,.050*strength)],
-      [.36,rgba(98,95,70,.032*strength)],
-      [.70,rgba(58,58,42,.015*strength)],
+      [0,rgba(137,146,158,.050*strength)],
+      [.36,rgba(105,116,128,.032*strength)],
+      [.70,rgba(60,65,73,.015*strength)],
       [1,'rgba(0,0,0,0)']
     ]);
   }
@@ -3170,7 +3281,6 @@ function updatePitProgress(){
     if(!st.crossed&&st.entrySign!==sign){
       st.crossed=true;st.crossSign=sign;
       if(!activeExitKey||exitNeedsReplacement)spawnExitBeyondPit(d,sign);
-      showHint('The pit room is behind you. The fluorescent hum changes ahead.',1.8);
     }
   }
 }
@@ -3610,7 +3720,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -3700,7 +3810,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92*settings.cinematics/100*settings.master/100;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.39 · JUMP + RESTART FIXES'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.40 · LIGHTING + FURNITURE CLUSTERS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
@@ -3861,6 +3971,39 @@ function movement(dt){
 // Four nearest working fluorescent fixtures are enough for mobile-friendly,
 // physically directional highlights on the furniture's brushed metal.
 const nearbyLightPoints=new Float32Array(12),nearbyLightPowers=new Float32Array(4);
+const MAX_FLICKER_LIGHTS=12;
+const flickerUniforms=new Float32Array(MAX_FLICKER_LIGHTS*4);
+function isFlickerLit(f,t){
+  if(!f||f.mode!=='flicker')return !!f&&!f.dead;
+  const xi=Math.round(f.x*100),zi=Math.round(f.z*100);
+  const seed=mix32((worldSeed^Math.imul(xi,0x5bd1e995)^Math.imul(zi,0x27d4eb2d))>>>0)/4294967296;
+  const span=1.6+seed*2.35;
+  const phase=((t+seed*17.23)%span+span)%span;
+  const burst=.52+seed*.66;
+  if(phase<burst){
+    const beat=Math.floor(phase*(8.0+seed*7.0));
+    const h=mix32((worldSeed^Math.imul(xi,0x6d2b79f5)^Math.imul(zi,0x3c6ef35f)^Math.imul(beat+1,0x297a2d39))>>>0)/4294967296;
+    return h>.44;
+  }
+  if(phase>span-(.07+seed*.23))return false;
+  return true;
+}
+function selectFlickerLights(x,z){
+  const found=[];
+  for(const f of fixtures){
+    if(f.mode!=='flicker')continue;
+    const dd=(f.x-x)*(f.x-x)+(f.z-z)*(f.z-z);
+    if(dd<14*14)found.push({f,dd});
+  }
+  found.sort((a,b)=>a.dd-b.dd);
+  flickerUniforms.fill(0);
+  for(let i=0;i<Math.min(MAX_FLICKER_LIGHTS,found.length);i++){
+    const f=found[i].f,at=i*4;
+    flickerUniforms[at]=f.x;flickerUniforms[at+1]=f.z;
+    flickerUniforms[at+2]=isFlickerLit(f,worldTime)?1:0;
+    flickerUniforms[at+3]=1;
+  }
+}
 const DUST_PIT_MAX=6,dustPitRects=new Float32Array(DUST_PIT_MAX*4);
 function selectDustPitRects(x,z){
   const ranked=[];
@@ -3877,10 +4020,10 @@ function selectNearestFixtureHighlights(x,z){
   const best=[1e20,1e20,1e20,1e20];
   nearbyLightPoints.fill(0);nearbyLightPowers.fill(0);
   for(const f of fixtures){
-    if(f.dead||f.mode==='dead')continue;
+    if(f.dead||f.mode==='dead'||(f.mode==='flicker'&&!isFlickerLit(f,worldTime)))continue;
     const dx=f.x-x,dz=f.z-z,dist=dx*dx+dz*dz;
     if(dist>225||dist>=best[3])continue;
-    const intensity=f.mode==='weak'?.32:f.mode==='flicker'?.50:1;
+    const intensity=f.mode==='weak'?.32:1;
     for(let k=0;k<4;k++)if(dist<best[k]){
       for(let n=3;n>k;n--){best[n]=best[n-1];nearbyLightPowers[n]=nearbyLightPowers[n-1];
         for(let a=0;a<3;a++)nearbyLightPoints[n*3+a]=nearbyLightPoints[(n-1)*3+a];}
@@ -3938,7 +4081,7 @@ void main(){
 const dustFS=`precision mediump float;
 uniform vec3 uDustCam;uniform vec3 uDustForward;
 uniform float uDustFlash;uniform sampler2D uDustLightMap;
-uniform vec2 uDustMapMin;uniform vec2 uDustMapSize;uniform vec4 uPitRects[6];
+uniform vec2 uDustMapMin;uniform vec2 uDustMapSize;uniform vec4 uPitRects[6];uniform vec4 uFlickerLights[12];
 varying vec3 vDustWorld;varying float vDustSeed;varying float vDustDepth;
 varying float vDustFine;varying float vDustVisibility;
 void main(){
@@ -3954,6 +4097,14 @@ void main(){
   vec2 lmuv=clamp((vDustWorld.xz-uDustMapMin)/uDustMapSize,vec2(.001),vec2(.999));
   float stored=texture2D(uDustLightMap,lmuv).r;
   float fixture=pow(clamp((stored-.027)/.973,0.0,1.0),1.35);
+  for(int i=0;i<12;i++){
+    vec4 fl=uFlickerLights[i];
+    if(fl.w>.5&&fl.z>.5){
+      float dd=distance(vDustWorld.xz,fl.xy);
+      fixture+=fl.z*.68*(1.0-smoothstep(.2,7.7,dd));
+    }
+  }
+  fixture=clamp(fixture,0.0,1.0);
   // Opacity and size stratification. Nearly invisible particles dominate;
   // the former build's brighter opacity is reserved for exceptionally rare motes.
   float visibility=vDustSeed<.78 ? (.055+.12*fract(vDustSeed*33.7)) :
@@ -4004,7 +4155,7 @@ try{
     vp:gl.getUniformLocation(program,'uDustVP'),cam:gl.getUniformLocation(program,'uDustCam'),
     fwd:gl.getUniformLocation(program,'uDustForward'),time:gl.getUniformLocation(program,'uDustTime'),
     flash:gl.getUniformLocation(program,'uDustFlash'),lm:gl.getUniformLocation(program,'uDustLightMap'),
-    min:gl.getUniformLocation(program,'uDustMapMin'),size:gl.getUniformLocation(program,'uDustMapSize'),pits:gl.getUniformLocation(program,'uPitRects')
+    min:gl.getUniformLocation(program,'uDustMapMin'),size:gl.getUniformLocation(program,'uDustMapSize'),pits:gl.getUniformLocation(program,'uPitRects'),flickers:gl.getUniformLocation(program,'uFlickerLights[0]')
   };
   dustBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,dustBuffer);
   gl.bufferData(gl.ARRAY_BUFFER,dustSeedData,gl.STATIC_DRAW);
@@ -4024,6 +4175,7 @@ function renderDust(vp,cam,fwd,time){
  gl.uniform2f(dustLoc.size,dustMapSpan[0],dustMapSpan[1]);
  selectDustPitRects(cam[0],cam[2]);
  gl.uniform4fv(dustLoc.pits,dustPitRects);
+ gl.uniform4fv(dustLoc.flickers,flickerUniforms);
  gl.bindBuffer(gl.ARRAY_BUFFER,dustBuffer);
  gl.enableVertexAttribArray(dustLoc.pos);
  gl.vertexAttribPointer(dustLoc.pos,4,gl.FLOAT,false,16,0);
@@ -4136,6 +4288,8 @@ function render(t){
  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(prog);
  gl.uniformMatrix4fv(loc.vp,false,vp);gl.uniform3f(loc.cam,eyeX,eyeY,eyeZ);gl.uniform3f(loc.fwd,fwd[0],fwd[1],fwd[2]);
  gl.uniform1f(loc.flash,player.flash?1:0);gl.uniform1f(loc.light,lightLevel);gl.uniform1f(loc.time,t*.001);gl.uniform1f(loc.fogControl,settings.fog/100);gl.uniform1f(loc.brightness,settings.brightness/100);gl.uniform1f(loc.filmGrain,settings.grain?1:0);
+ selectFlickerLights(eyeX,eyeZ);
+ gl.uniform4fv(loc.flickers,flickerUniforms);
  selectNearestFixtureHighlights(eyeX,eyeZ);
  gl.uniform3fv(loc.nearbyFixture,nearbyLightPoints);gl.uniform1fv(loc.fixtureStrength,nearbyLightPowers);
  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,textures[0]);
