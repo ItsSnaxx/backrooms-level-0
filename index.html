@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lost Between" />
 <meta name="color-scheme" content="dark" />
 <meta name="theme-color" content="#0d0d08" />
-<title>BACKROOMS: LOST BETWEEN — 0.9.41 iPhone Safari</title>
+<title>BACKROOMS: LOST BETWEEN — 0.9.42 iPhone Safari</title>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   html,body{margin:0;width:100%;height:100%;min-height:100%;overflow:hidden;background:#090906;color:#ebe7ca;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;position:fixed;inset:0}body{height:var(--app-height,100%);min-height:var(--app-height,100%)}@supports(height:100dvh){html,body{height:100dvh;min-height:100dvh}body{height:var(--app-height,100dvh);min-height:var(--app-height,100dvh)}}
@@ -341,7 +341,7 @@ body.game-paused #grain{animation-play-state:paused}
 </div>
 <div id="start">
   <div id="startCard">
-    <div class="kicker">IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS</div>
+    <div class="kicker">IPHONE SAFARI BUILD 0.9.42 · PHYSICALLY STACKED FURNITURE</div>
     <h1>BACKROOMS<span>LOST BETWEEN</span></h1>
     <p>No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.</p>
     <button id="enter" type="button">NOCLIP</button>
@@ -2776,73 +2776,203 @@ function placeSpiralingClippedChair(wallX,wallZ,wallSide,stage,r,out){
   else y=Math.max(.13-minHeight,Math.min(H+.08-maxHeight,y));
   emitFurnitureMesh(mesh,wallX+nx*shift,y,wallZ+nz*shift,yaw,pitch,roll,out,true);
 }
-// Rare, room-gated furniture piles: actual provided OBJ geometry, rotated, with
-// per-mesh collision and the existing deterministic materials/reflective metal.
-// These props are intentionally entangled like objects that no-clipped together.
+// Physically supported furniture piles (Build 0.9.42). Placement is evaluated
+// against the real imported mesh triangles, not against arbitrary layer heights.
+// An elevated prop is only emitted after its lowest surfaces make contact with
+// the upward-facing polygons of props already in the pile. Unstable poses fail
+// closed instead of producing a floating chair.
+const PILE_MESH_POINTS=new Map();
+const PILE_GRID_CELL=.30;
+function pileUniquePoints(mesh){
+  let pts=PILE_MESH_POINTS.get(mesh);
+  if(pts)return pts;
+  const unique=new Map();
+  for(let i=0;i<mesh.length;i+=7){
+    const x=mesh[i],y=mesh[i+1],z=mesh[i+2];
+    unique.set(x.toFixed(4)+','+y.toFixed(4)+','+z.toFixed(4),[x,y,z]);
+  }
+  pts=[...unique.values()];PILE_MESH_POINTS.set(mesh,pts);return pts;
+}
+function pileRotation(yaw,pitch,roll){
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
+  return [cy*cr+sy*sp*sr,-cy*sr+sy*sp*cr,sy*cp,
+          cp*sr,cp*cr,-sp,
+          -sy*cr+cy*sp*sr,sy*sr+cy*sp*cr,cy*cp];
+}
+function pileRotatedPoints(mesh,rot){
+  const pts=pileUniquePoints(mesh),out=[];
+  let minY=Infinity,maxY=-Infinity,footX=0,footZ=0,footCount=0;
+  for(const p of pts){
+    const q=[p[0]*rot[0]+p[1]*rot[1]+p[2]*rot[2],
+             p[0]*rot[3]+p[1]*rot[4]+p[2]*rot[5],
+             p[0]*rot[6]+p[1]*rot[7]+p[2]*rot[8]];
+    out.push(q);minY=Math.min(minY,q[1]);maxY=Math.max(maxY,q[1]);
+  }
+  for(const q of out)if(q[1]<minY+.035){footX+=q[0];footZ+=q[2];footCount++}
+  return {pts:out,minY,maxY,footX:footX/Math.max(1,footCount),footZ:footZ/Math.max(1,footCount)};
+}
 function placeFurniturePile(room,x,z,variant,r,out){
   const roomArea=(room.x1-room.x0)*(room.z1-room.z0);
   if(roomArea<(variant==='hallchairs'?33:68))return 0;
-  const heading=crr(r,-Math.PI,Math.PI),c=Math.cos(heading),sn=Math.sin(heading);
+  const heading=crr(r,-Math.PI,Math.PI),ca=Math.cos(heading),sa=Math.sin(heading);
+  const heightLimit=H-.10;
+  const faces=[],grid=new Map();
+  const bounds={x0:room.x0+.09,x1:room.x1-.09,z0:room.z0+.09,z1:room.z1-.09};
   let pieces=0;
-  function add(type,dx,dz,bottom,yaw=0,pitch=0,roll=0){
-    const mesh=type==='chair'?FURNITURE_MESHES.chair:type==='sofa'?FURNITURE_MESHES.sofa:(r()<.5?FURNITURE_MESHES.table:FURNITURE_MESHES.tableAlt);
-    const spin=heading+yaw, cy=Math.cos(spin),sy=Math.sin(spin),cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
-    const r10=cp*sr,r11=cp*cr,r12=-sp;
-    let bottomY=Infinity,topY=-Infinity;
-    for(let i=0;i<mesh.length;i+=7){
-      const yy=mesh[i]*r10+mesh[i+1]*r11+mesh[i+2]*r12;
-      if(yy<bottomY)bottomY=yy;if(yy>topY)topY=yy;
+  const key=(a,b)=>a+','+b;
+  const cellX=x=>Math.floor(x/PILE_GRID_CELL);
+  function addFace(a,b,c){
+    const ux=b[0]-a[0],uz=b[2]-a[2],vx=c[0]-a[0],vz=c[2]-a[2];
+    const determinant=ux*vz-uz*vx;
+    // Cross-product Y is -determinant, so upward triangles have det < 0.
+    const heightA=b[1]-a[1],heightB=c[1]-a[1];
+    const normY=-determinant,normalLen=Math.hypot(uz*heightB-heightA*vz,normY,heightA*vx-ux*heightB);
+    const area=Math.abs(determinant)*.5;
+    if(normY<=.0005||normY/Math.max(.000001,normalLen)<.43||area<.00045)return;
+    const face={ax:a[0],az:a[2],bx:b[0],bz:b[2],cx:c[0],cz:c[2],
+      ay:a[1],by:b[1],cy:c[1],det:determinant,area,
+      x:(a[0]+b[0]+c[0])/3,z:(a[2]+b[2]+c[2])/3,
+      y:(a[1]+b[1]+c[1])/3};
+    const id=faces.length;faces.push(face);
+    const ix0=cellX(Math.min(face.ax,face.bx,face.cx)),ix1=cellX(Math.max(face.ax,face.bx,face.cx));
+    const iz0=cellX(Math.min(face.az,face.bz,face.cz)),iz1=cellX(Math.max(face.az,face.bz,face.cz));
+    for(let i=ix0;i<=ix1;i++)for(let j=iz0;j<=iz1;j++){
+      const k=key(i,j);let bucket=grid.get(k);if(!bucket)grid.set(k,bucket=[]);bucket.push(id);
     }
-    // Ceiling clearance applies to every vertex, including tilted chair legs.
-    const floorY=Math.max(0,Math.min(bottom,H-.15-(topY-bottomY)));
-    const y=floorY-bottomY;
-    const wx=x+dx*c-dz*sn,wz=z+dx*sn+dz*c;
-    emitFurnitureMesh(mesh,wx,y,wz,spin,pitch,roll,out,false);
-    pieces++;
   }
+  // Highest physically upward-facing surface below a point, found from the
+  // supporting triangle itself (chair seats, table tops, sofa upholstery).
+  function supportAt(px,pz){
+    const bucket=grid.get(key(cellX(px),cellX(pz)));
+    if(!bucket)return 0;
+    let best=0;
+    for(const id of bucket){
+      const f=faces[id],u=((px-f.ax)*(f.cz-f.az)-(pz-f.az)*(f.cx-f.ax))/f.det;
+      const v=((f.bx-f.ax)*(pz-f.az)-(f.bz-f.az)*(px-f.ax))/f.det;
+      if(u<-.0001||v<-.0001||u+v>1.0001)continue;
+      const h=f.ay+(f.by-f.ay)*u+(f.cy-f.ay)*v;
+      if(h>best)best=h;
+    }
+    return best;
+  }
+  function registerSupport(mesh,tx,ty,tz,rot){
+    // The same exact rotation matrix is used by the visible mesh and collider.
+    for(let i=0;i<mesh.length;i+=21){
+      const tri=[];
+      for(let n=0;n<3;n++){
+        const k=i+n*7,px=mesh[k],py=mesh[k+1],pz=mesh[k+2];
+        tri.push([tx+px*rot[0]+py*rot[1]+pz*rot[2],
+                  ty+px*rot[3]+py*rot[4]+pz*rot[5],
+                  tz+px*rot[6]+py*rot[7]+pz*rot[8]]);
+      }
+      addFace(tri[0],tri[1],tri[2]);
+    }
+  }
+  function meshFor(type){return type==='chair'?FURNITURE_MESHES.chair:type==='sofa'?FURNITURE_MESHES.sofa:(r()<.5?FURNITURE_MESHES.table:FURNITURE_MESHES.tableAlt)}
+  function insideRoom(pts,px,pz){
+    for(const q of pts){const wx=px+q[0],wz=pz+q[2];
+      if(wx<bounds.x0||wx>bounds.x1||wz<bounds.z0||wz>bounds.z1)return false;}
+    return true;
+  }
+  function commit(mesh,pose,px,py,pz,yaw,pitch,roll){
+    emitFurnitureMesh(mesh,px,py,pz,yaw,pitch,roll,out,false);
+    registerSupport(mesh,px,py,pz,pileRotation(yaw,pitch,roll));pieces++;
+  }
+  function ground(type,dx,dz,yaw,pitch=0,roll=0){
+    const mesh=meshFor(type),angle=heading+yaw,rot=pileRotation(angle,pitch,roll),pose=pileRotatedPoints(mesh,rot);
+    const px=x+dx*ca-dz*sa,pz=z+dx*sa+dz*ca,py=-pose.minY+.004;
+    if(pose.maxY+py>heightLimit||!insideRoom(pose.pts,px,pz))return false;
+    commit(mesh,pose,px,py,pz,angle,pitch,roll);return true;
+  }
+  function upper(type,style,preferredFace=null){
+    const mesh=meshFor(type);
+    let choice=null,bestScore=-Infinity;
+    const trials=style==='top'?42:32;
+    for(let attempt=0;attempt<trials;attempt++){
+      const options=[];let weightTotal=0;
+      for(const f of faces){
+        if(f.y<.245||f.y>1.76||f.area<.0025)continue;
+        // Favor broad bearing surfaces instead of balancing whole chairs on a
+        // single thin leg. Keep the pile focused tightly around its center.
+        const d=Math.hypot(f.x-x,f.z-z);
+        if(d>(variant==='hallchairs'?1.10:1.55))continue;
+        const weight=f.area/(1+f.y*.43)*Math.max(.2,1-d*.25);
+        weightTotal+=weight;options.push([f,weightTotal]);
+      }
+      if(!options.length)break;
+      const ticket=r()*weightTotal;
+      const anchor=options.find(e=>e[1]>=ticket)?.[0]||options[options.length-1][0];
+      let yaw=heading+crr(r,-Math.PI,Math.PI),pitch=0,roll=0;
+      if(style==='lean'){
+        // A sideways chair can rest on its frame, arm or back, not in mid-air.
+        pitch=crr(r,-.34,.34);roll=(r()<.5?-1:1)*crr(r,.52,1.23);
+      }else if(style==='top'){
+        pitch=crr(r,-.24,.24);roll=crr(r,-.28,.28);
+      }else{
+        pitch=crr(r,-.12,.12);roll=crr(r,-.16,.16);
+      }
+      const rot=pileRotation(yaw,pitch,roll),pose=pileRotatedPoints(mesh,rot);
+      const d=(variant==='hallchairs'?.045:.10);
+      const px=anchor.x-pose.footX+crr(r,-d,d),pz=anchor.z-pose.footZ+crr(r,-d,d);
+      if(Math.hypot(px-x,pz-z)>(variant==='hallchairs'?1.12:1.35))continue;
+      if(!insideRoom(pose.pts,px,pz))continue;
+      // Start with the target upper surface, then lift against *every other*
+      // upward face contacted by the candidate. This is a true contact solve:
+      // the lowest point cannot hang in the air above a support below it.
+      let lift=Math.max(0,anchor.y-pose.minY),maxLift=lift;
+      for(const q of pose.pts){
+        const h=supportAt(px+q[0],pz+q[2]);
+        if(h>.12)maxLift=Math.max(maxLift,h-q[1]);
+      }
+      lift=Math.max(0,maxLift)+.002;
+      if(lift+pose.minY<.15||lift+pose.maxY>heightLimit)continue;
+      let contacts=0,minSpread=.0,points=[];
+      for(const q of pose.pts){
+        const h=supportAt(px+q[0],pz+q[2]);
+        const gap=lift+q[1]-h;
+        if(h>.23&&gap>=-.009&&gap<.032){
+          const wx=px+q[0],wz=pz+q[2];
+          if(!points.some(t=>Math.hypot(t[0]-wx,t[1]-wz)<.045))points.push([wx,wz]);
+        }
+      }
+      contacts=points.length;
+      for(let j=0;j<points.length;j++)for(let k=j+1;k<points.length;k++)minSpread=Math.max(minSpread,Math.hypot(points[j][0]-points[k][0],points[j][1]-points[k][1]));
+      if(contacts<2||minSpread<.09)continue;
+      const score=Math.min(5,contacts)*.8+Math.min(.55,minSpread)*2.5
+        -Math.hypot(px-x,pz-z)*.23-Math.max(0,lift-1.35)*.45;
+      if(score>bestScore){bestScore=score;choice={mesh,pose,px,pz,py:lift,yaw,pitch,roll};}
+      if(score>4.3)break;
+    }
+    if(!choice)return false;
+    commit(choice.mesh,choice.pose,choice.px,choice.py,choice.pz,choice.yaw,choice.pitch,choice.roll);
+    return true;
+  }
+  // Low, close, grounded foundations. The next layer is fitted to their real
+  // upholstered seats, chair frames and table tops, not numerical heights.
   if(variant==='hallchairs'){
-    // Compact, sideways stack at the far end of a corridor, preserving a full
-    // walking lane beside it. Each piece uses the original detailed chair mesh.
-    const layers=[
-      [-.40,-.40,0,-.65,.08,-.09],[.43,-.40,0,.76,-.10,.14],
-      [-.40,.43,0,2.32,.10,-.06],[.42,.41,0,3.36,-.09,.15],
-      [0,-.27,.52,1.5,.42,.68],[-.20,.22,.72,-.5,-.50,-.85],
-      [.20,-.04,1.12,2.60,.56,1.1],[.0,.12,1.50,-1.3,-.30,-1.25]
-    ];
-    for(const [dx,dz,bottom,yaw,pitch,roll] of layers){
-      add('chair',dx,dz,bottom,yaw+crr(r,-.24,.24),pitch+crr(r,-.08,.08),roll+crr(r,-.12,.12));
-    }
+    for(const a of [
+      ['chair',-.38,-.37,-.56,0,0],['chair',.21,-.40,.83,0,0],
+      ['chair',-.38,.17,2.15,0,0],['chair',.19,.14,-2.05,.08,.07]
+    ])ground(...a);
+    for(const style of ['upright','lean','upright','lean','top'])upper('chair',style);
   }else if(variant==='chairs'){
-    // Base: abandoned dining chairs, overlapping in a fairly tight circle.
-    for(let i=0;i<6;i++){
-      const a=Math.PI*2*i/6,dist=.72+crr(r,-.14,.18);
-      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,0,a+Math.PI*.52+crr(r,-.24,.24),crr(r,-.10,.12),crr(r,-.09,.10));
-    }
-    // Several seats jammed sideways into the chairs beneath them.
-    for(let i=0;i<6;i++){
-      const a=Math.PI*2*(i+.32)/6,dist=.42+crr(r,-.06,.24);
-      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,.55+crr(r,-.09,.18),a+crr(r,-.9,.9),crr(r,-.48,.46),crr(r,-.72,.74));
-    }
-    // Distinct tilted silhouettes crown the pile, high but beneath the ceiling.
-    for(let i=0;i<3;i++){
-      const a=Math.PI*2*(i+.14)/3;
-      add('chair',Math.cos(a)*.30,Math.sin(a)*.30,1.35+crr(r,-.10,.13),a+crr(r,-.8,.8),crr(r,-.42,.48),crr(r,-.92,.94));
-    }
+    const foundation=[
+      ['chair',-.57,-.35,-.55,0,0],['chair',-.08,-.54,.45,0,0],
+      ['chair',.46,-.38,1.32,0,0],['chair',.56,.13,2.50,0,0],
+      ['chair',.03,.45,-1.75,0,0],['chair',-.48,.29,2.75,0,0]
+    ];
+    for(const a of foundation)ground(...a);
+    for(const style of ['upright','lean','upright','upright','lean','top','upright','lean','top'])upper('chair',style);
   }else{
-    // Mixed pile: a sofa/tables form the weight-bearing bottom layers.
-    add('sofa',-.48,-.34,0,.18+crr(r,-.20,.20),0,0);
-    add('table',.81,.45,0,Math.PI*.4+crr(r,-.18,.18),.05,crr(r,-.12,.12));
-    add('chair',-.85,.62,0,.8+crr(r,-.22,.22),crr(r,-.10,.12),.09);
-    add('chair',.95,-.79,0,2.6+crr(r,-.2,.2),.1,-.12);
-    add('sofa',.12,.09,.48,-.48,crr(r,-.12,.12),crr(r,-.22,.18));
-    add('table',-.48,.61,.88,1.2,crr(r,-.39,.42),crr(r,-.54,.58));
-    for(let i=0;i<4;i++){
-      const a=Math.PI*2*(i+.23)/4,dist=.56+crr(r,-.12,.19);
-      add('chair',Math.cos(a)*dist,Math.sin(a)*dist,.85+crr(r,-.15,.18),a+Math.PI*.6,crr(r,-.55,.52),crr(r,-.72,.72));
-    }
-    for(let i=0;i<2;i++){
-      add('chair',crr(r,-.24,.24),crr(r,-.3,.3),1.40+crr(r,-.12,.1),crr(r,-1.1,1.1),crr(r,-.33,.44),crr(r,-.90,.90));
-    }
+    const foundation=[
+      ['sofa',-.57,-.39,-.20,0,0],['table',.52,.55,1.04,0,0],
+      ['chair',.61,-.51,1.75,0,0],['chair',-.60,.55,-.80,0,0],
+      ['chair',.12,-.59,.25,0,0]
+    ];
+    for(const a of foundation)ground(...a);
+    // Real couch and tabletop surfaces carry the elevated furniture.
+    for(const style of ['upright','upright','lean','upright','lean','upright','top','lean'])upper('chair',style);
+    upper('table','top');
   }
   return pieces;
 }
@@ -3886,7 +4016,7 @@ function updateExitSequence(dt){
   if(t>=4.22)showEscapedScreen();
 }
 function restoreMainMenuCard(){
-  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS';
+  ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.42 · PHYSICALLY STACKED FURNITURE';
   ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>';
   ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
   ui.enter.textContent='NOCLIP';ui.enter.disabled=false;
@@ -3976,7 +4106,7 @@ function beginGame(e){
  if(!audio){try{startAudio()}catch(_){}}
  setIntroHumMuted(true);
  try{introStaticAudio.currentTime=0;introStaticAudio.volume=.92*settings.cinematics/100*settings.master/100;const ap=introStaticAudio.play();if(ap&&ap.catch)ap.catch(()=>{})}catch(_){}
- ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.41 · EXPANDED FURNITURE CLUSTERS'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
+ ui.start.querySelector('.kicker').textContent='IPHONE SAFARI BUILD 0.9.42 · PHYSICALLY STACKED FURNITURE'; ui.start.querySelector('h1').innerHTML='BACKROOMS<span>LOST BETWEEN</span>'; ui.start.querySelector('p').textContent='No objective marker. No fixed map. Every direction continues into new rooms. Low ceilings. Yellow partitions. Fluorescent light. Persistent rooms. Your path remains behind you.';
  requestAnimationFrame(()=>{
   if(spawnPointBlocked(player.x,player.z,RADIUS+.10))movePlayerToSafeSpawn(player.x,player.z);
   ui.start.style.display='none';started=true;window.__lbStarted=true;ui.enter.disabled=false;ui.enter.textContent='NOCLIP';startLocked=false;try{beginProvidedAudioDecode()}catch(_){};syncAppHeight();resize();startNoclipIntro()
